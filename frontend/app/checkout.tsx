@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Modal,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Modal, Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -11,25 +11,71 @@ import * as Haptics from "expo-haptics";
 import { COLORS, SPACING, RADIUS, SHADOW } from "@/src/theme";
 import { api } from "@/src/api";
 import { useApp } from "@/src/store";
+import { getEnabledMethods, getMethod } from "@/src/payments";
+import {
+  RESTAURANT,
+  ServiceabilityStatus,
+  fetchCurrentPosition,
+  getLocationPermission,
+  requestLocationPermission,
+} from "@/src/location";
 
 export default function Checkout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { cart, user, clearCart, refreshUser } = useApp();
 
-  const [address, setAddress] = useState("Abul Fazal Enclave, Jamia Nagar, New Delhi");
+  const methods = getEnabledMethods();
+  const [payment, setPayment] = useState<string>(methods[0]?.id || "cod");
+
+  const [address, setAddress] = useState("");
   const [phone, setPhone] = useState(user?.phone || "");
   const [name, setName] = useState(user?.name || "");
   const [notes, setNotes] = useState("");
-  const [payment, setPayment] = useState<"cod" | "upi">("cod");
   const [coupon, setCoupon] = useState("");
   const [coupons, setCoupons] = useState<any[]>([]);
   const [useLoyalty, setUseLoyalty] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState("");
-  const [showUpi, setShowUpi] = useState(false);
   const [showCoupons, setShowCoupons] = useState(false);
 
+  const [loc, setLoc] = useState<ServiceabilityStatus>({ state: "idle" });
+
+  const checkServiceability = useCallback(async () => {
+    setLoc({ state: "checking" });
+    try {
+      let perm = await getLocationPermission();
+      if (perm.status !== "granted") {
+        if (!perm.canAskAgain) {
+          setLoc({ state: "denied", canAskAgain: false });
+          return;
+        }
+        perm = await requestLocationPermission();
+        if (perm.status !== "granted") {
+          setLoc({ state: "denied", canAskAgain: perm.canAskAgain });
+          return;
+        }
+      }
+      const pos = await fetchCurrentPosition();
+      const { latitude, longitude } = pos.coords;
+      const res = await api.deliveryCheck(latitude, longitude);
+      if (res.serviceable) {
+        setLoc({
+          state: "ok",
+          lat: latitude,
+          lng: longitude,
+          distance_km: res.distance_km,
+          zone_name: res.zone?.name || RESTAURANT.name,
+        });
+      } else {
+        setLoc({ state: "out_of_zone", lat: latitude, lng: longitude, distance_km: res.distance_km });
+      }
+    } catch (e: any) {
+      setLoc({ state: "error", message: e?.message || "Could not fetch location" });
+    }
+  }, []);
+
+  useEffect(() => { checkServiceability(); }, [checkServiceability]);
   useEffect(() => { api.coupons().then(setCoupons); }, []);
 
   const subtotal = cart.reduce((s, l) => s + l.price * l.quantity, 0);
@@ -40,22 +86,30 @@ export default function Checkout() {
   const deliveryFee = subtotal >= 250 ? 0 : 30;
   const total = Math.max(0, subtotal - discount - loyaltyDiscount + deliveryFee);
 
+  const canPlace =
+    loc.state === "ok" &&
+    name.trim().length > 0 &&
+    phone.trim().length >= 10 &&
+    address.trim().length > 0 &&
+    !placing;
+
   const placeOrder = async () => {
     setError("");
+    if (loc.state !== "ok") {
+      setError("Please enable location to check delivery availability");
+      return;
+    }
     if (!name.trim() || phone.trim().length < 10 || !address.trim()) {
       setError("Please fill name, phone & address");
       return;
     }
-    if (payment === "upi") {
-      setShowUpi(true);
-      return;
-    }
-    await submit();
-  };
-
-  const submit = async () => {
     setPlacing(true);
     try {
+      const method = getMethod(payment);
+      if (!method) throw new Error("Invalid payment method");
+      const result = await method.pay({ amount: total, customerName: name, customerPhone: phone });
+      if (!result.success) throw new Error(result.message || "Payment failed");
+
       const res = await api.placeOrder({
         items: cart,
         address, phone, name,
@@ -63,11 +117,12 @@ export default function Checkout() {
         coupon_code: validCoupon?.code,
         notes,
         use_loyalty: useLoyalty,
+        lat: loc.lat,
+        lng: loc.lng,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       clearCart();
       refreshUser();
-      setShowUpi(false);
       router.replace(`/tracking/${res.id}`);
     } catch (e: any) {
       setError(e.message || "Failed to place order");
@@ -90,22 +145,25 @@ export default function Checkout() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 180 }}>
+        {/* Location card */}
+        <LocationCard status={loc} onRetry={checkServiceability} onOpenSettings={() => Linking.openSettings()} />
+
         <Text style={styles.section}>Delivery Details</Text>
         <View style={styles.input}>
           <Ionicons name="person" size={18} color={COLORS.textSecondary} />
-          <TextInput value={name} onChangeText={setName} placeholder="Name" style={styles.txt} testID="co-name" />
+          <TextInput value={name} onChangeText={setName} placeholder="Name" placeholderTextColor={COLORS.textMuted} style={styles.txt} testID="co-name" />
         </View>
         <View style={styles.input}>
           <Ionicons name="call" size={18} color={COLORS.textSecondary} />
-          <TextInput value={phone} onChangeText={setPhone} placeholder="Phone" keyboardType="number-pad" style={styles.txt} testID="co-phone" />
+          <TextInput value={phone} onChangeText={setPhone} placeholder="Phone" placeholderTextColor={COLORS.textMuted} keyboardType="number-pad" style={styles.txt} testID="co-phone" />
         </View>
         <View style={styles.input}>
           <Ionicons name="location" size={18} color={COLORS.textSecondary} />
-          <TextInput value={address} onChangeText={setAddress} placeholder="Address" multiline style={styles.txt} testID="co-address" />
+          <TextInput value={address} onChangeText={setAddress} placeholder="Full delivery address" placeholderTextColor={COLORS.textMuted} multiline style={styles.txt} testID="co-address" />
         </View>
         <View style={styles.input}>
           <Ionicons name="chatbox" size={18} color={COLORS.textSecondary} />
-          <TextInput value={notes} onChangeText={setNotes} placeholder="Delivery instructions (optional)" style={styles.txt} testID="co-notes" />
+          <TextInput value={notes} onChangeText={setNotes} placeholder="Delivery instructions (optional)" placeholderTextColor={COLORS.textMuted} style={styles.txt} testID="co-notes" />
         </View>
 
         <Text style={styles.section}>Apply Coupon</Text>
@@ -115,6 +173,7 @@ export default function Checkout() {
             value={coupon}
             onChangeText={(t) => setCoupon(t.toUpperCase())}
             placeholder="Enter code"
+            placeholderTextColor={COLORS.textMuted}
             autoCapitalize="characters"
             style={styles.txt}
             testID="co-coupon"
@@ -139,16 +198,25 @@ export default function Checkout() {
         ) : null}
 
         <Text style={styles.section}>Payment Method</Text>
-        <Pressable testID="pay-cod" onPress={() => setPayment("cod")} style={[styles.payRow, payment === "cod" && styles.payActive]}>
-          <Ionicons name="cash" size={22} color={COLORS.success} />
-          <Text style={styles.payLbl}>Cash on Delivery</Text>
-          {payment === "cod" ? <Ionicons name="checkmark-circle" size={20} color={COLORS.brand} /> : null}
-        </Pressable>
-        <Pressable testID="pay-upi" onPress={() => setPayment("upi")} style={[styles.payRow, payment === "upi" && styles.payActive]}>
-          <Ionicons name="qr-code" size={22} color={COLORS.brand} />
-          <Text style={styles.payLbl}>UPI QR Code</Text>
-          {payment === "upi" ? <Ionicons name="checkmark-circle" size={20} color={COLORS.brand} /> : null}
-        </Pressable>
+        {methods.map((m) => {
+          const active = payment === m.id;
+          return (
+            <Pressable
+              key={m.id}
+              testID={`pay-${m.id}`}
+              onPress={() => setPayment(m.id)}
+              style={[styles.payRow, active && styles.payActive]}
+            >
+              <Ionicons name={m.icon as any} size={22} color={COLORS.success} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.payLbl}>{m.label}</Text>
+                <Text style={styles.paySub}>{m.description}</Text>
+              </View>
+              {active ? <Ionicons name="checkmark-circle" size={20} color={COLORS.brand} /> : null}
+            </Pressable>
+          );
+        })}
+        <Text style={styles.morePayments}>💡 Online payments (Razorpay / UPI QR) coming soon</Text>
 
         <View style={styles.totals}>
           <Row lbl="Subtotal" val={`₹${subtotal.toFixed(0)}`} />
@@ -162,46 +230,28 @@ export default function Checkout() {
           </View>
         </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text testID="checkout-error" style={styles.error}>{error}</Text> : null}
       </ScrollView>
 
       <View style={[styles.bottom, { paddingBottom: insets.bottom + SPACING.md }]}>
-        <Pressable testID="place-order-btn" onPress={placeOrder} disabled={placing} style={styles.placeBtn}>
+        <Pressable
+          testID="place-order-btn"
+          onPress={placeOrder}
+          disabled={!canPlace}
+          style={[styles.placeBtn, !canPlace && styles.placeBtnDisabled]}
+        >
           {placing ? <ActivityIndicator color="#fff" /> : (
             <>
-              <Text style={styles.placeTxt}>Place Order</Text>
+              <Text style={styles.placeTxt}>{loc.state === "ok" ? "Place Order" : "Location Required"}</Text>
               <Text style={styles.placePrice}>₹{total.toFixed(0)}</Text>
             </>
           )}
         </Pressable>
       </View>
 
-      {/* UPI Modal */}
-      <Modal visible={showUpi} transparent animationType="slide" onRequestClose={() => setShowUpi(false)}>
-        <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Scan to Pay</Text>
-            <View style={styles.qr}>
-              <Ionicons name="qr-code" size={140} color={COLORS.black} />
-            </View>
-            <Text style={styles.upiId}>UPI ID: mezbaan@upi</Text>
-            <Text style={styles.amount}>Amount: ₹{total.toFixed(0)}</Text>
-            <View style={{ flexDirection: "row", gap: 8, marginTop: SPACING.lg }}>
-              <Pressable onPress={() => setShowUpi(false)} style={[styles.modalBtn, { backgroundColor: COLORS.surfaceAlt }]}>
-                <Text style={{ fontWeight: "800", color: COLORS.textPrimary }}>Cancel</Text>
-              </Pressable>
-              <Pressable testID="upi-confirm" onPress={submit} style={[styles.modalBtn, { backgroundColor: COLORS.brand }]}>
-                {placing ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontWeight: "800" }}>I Have Paid</Text>}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Coupons Modal */}
       <Modal visible={showCoupons} transparent animationType="slide" onRequestClose={() => setShowCoupons(false)}>
         <View style={styles.modalBg}>
-          <View style={[styles.modalCard, { padding: SPACING.lg }]}>
+          <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Available Coupons</Text>
             {coupons.map((c) => (
               <Pressable
@@ -228,6 +278,77 @@ export default function Checkout() {
         </View>
       </Modal>
     </KeyboardAvoidingView>
+  );
+}
+
+function LocationCard({ status, onRetry, onOpenSettings }: { status: ServiceabilityStatus; onRetry: () => void; onOpenSettings: () => void }) {
+  if (status.state === "idle" || status.state === "checking") {
+    return (
+      <View style={styles.locCard} testID="loc-card-checking">
+        <ActivityIndicator color={COLORS.brand} />
+        <View style={{ flex: 1, marginLeft: SPACING.md }}>
+          <Text style={styles.locTitle}>Checking delivery availability…</Text>
+          <Text style={styles.locSub}>Detecting your location via GPS</Text>
+        </View>
+      </View>
+    );
+  }
+  if (status.state === "ok") {
+    return (
+      <View style={[styles.locCard, styles.locOk]} testID="loc-card-ok">
+        <Ionicons name="checkmark-circle" size={26} color={COLORS.success} />
+        <View style={{ flex: 1, marginLeft: SPACING.md }}>
+          <Text style={[styles.locTitle, { color: COLORS.success }]}>We deliver here!</Text>
+          <Text style={styles.locSub}>{status.distance_km.toFixed(1)} km from {status.zone_name}</Text>
+        </View>
+        <Pressable testID="loc-refresh" onPress={onRetry}><Ionicons name="refresh" size={20} color={COLORS.textMuted} /></Pressable>
+      </View>
+    );
+  }
+  if (status.state === "out_of_zone") {
+    return (
+      <View style={[styles.locCard, styles.locBad]} testID="loc-card-out">
+        <Ionicons name="close-circle" size={26} color={COLORS.error} />
+        <View style={{ flex: 1, marginLeft: SPACING.md }}>
+          <Text style={[styles.locTitle, { color: COLORS.error }]}>Sorry! We will deliver in your area soon.</Text>
+          <Text style={styles.locSub}>You are {status.distance_km.toFixed(1)} km away (max 5 km)</Text>
+        </View>
+        <Pressable testID="loc-refresh" onPress={onRetry}><Ionicons name="refresh" size={20} color={COLORS.textMuted} /></Pressable>
+      </View>
+    );
+  }
+  if (status.state === "denied") {
+    return (
+      <View style={[styles.locCard, styles.locBad]} testID="loc-card-denied">
+        <Ionicons name="location-outline" size={26} color={COLORS.error} />
+        <View style={{ flex: 1, marginLeft: SPACING.md }}>
+          <Text style={[styles.locTitle, { color: COLORS.error }]}>Location required</Text>
+          <Text style={styles.locSub}>Enable location so we can confirm delivery to your address</Text>
+        </View>
+        {status.canAskAgain ? (
+          <Pressable testID="loc-grant" onPress={onRetry} style={styles.locBtn}>
+            <Text style={styles.locBtnTxt}>Allow</Text>
+          </Pressable>
+        ) : (
+          <Pressable testID="loc-settings" onPress={onOpenSettings} style={styles.locBtn}>
+            <Text style={styles.locBtnTxt}>Settings</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
+  // error
+  return (
+    <View style={[styles.locCard, styles.locBad]} testID="loc-card-error">
+      <Ionicons name="warning" size={26} color={COLORS.error} />
+      <View style={{ flex: 1, marginLeft: SPACING.md }}>
+        <Text style={[styles.locTitle, { color: COLORS.error }]}>Could not fetch location</Text>
+        <Text style={styles.locSub}>{status.message}</Text>
+      </View>
+      <Pressable testID="loc-refresh" onPress={onRetry} style={styles.locBtn}>
+        <Text style={styles.locBtnTxt}>Retry</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -258,7 +379,9 @@ const styles = StyleSheet.create({
   toggleDotOn: { alignSelf: "flex-end" },
   payRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, gap: 12, borderWidth: 1.5, borderColor: "transparent" },
   payActive: { borderColor: COLORS.brand, backgroundColor: COLORS.surfaceTint },
-  payLbl: { flex: 1, fontWeight: "700", color: COLORS.textPrimary },
+  payLbl: { fontWeight: "800", color: COLORS.textPrimary },
+  paySub: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+  morePayments: { fontSize: 12, color: COLORS.textMuted, marginTop: 4, fontStyle: "italic" },
   totals: { backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginTop: SPACING.lg },
   totRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
   totLbl: { color: COLORS.textSecondary },
@@ -270,20 +393,25 @@ const styles = StyleSheet.create({
   error: { color: COLORS.error, textAlign: "center", marginTop: SPACING.md },
   bottom: { position: "absolute", bottom: 0, left: 0, right: 0, padding: SPACING.lg, backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, ...SHADOW.strong },
   placeBtn: { backgroundColor: COLORS.brand, borderRadius: RADIUS.pill, paddingVertical: 16, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: SPACING.xl, alignItems: "center" },
+  placeBtnDisabled: { backgroundColor: COLORS.textMuted },
   placeTxt: { color: "#fff", fontWeight: "800", fontSize: 16 },
   placePrice: { color: COLORS.gold, fontWeight: "900", fontSize: 18 },
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  modalCard: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: SPACING.xl, paddingBottom: SPACING.xl + 20, alignItems: "center" },
+  modalCard: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: SPACING.xl, paddingBottom: SPACING.xl + 20 },
   modalTitle: { fontSize: 18, fontWeight: "900", color: COLORS.textPrimary, marginBottom: SPACING.lg },
-  qr: { width: 180, height: 180, borderRadius: RADIUS.md, backgroundColor: COLORS.white, borderWidth: 2, borderColor: COLORS.brand, alignItems: "center", justifyContent: "center" },
-  upiId: { fontWeight: "700", color: COLORS.textPrimary, marginTop: SPACING.md },
-  amount: { fontSize: 22, fontWeight: "900", color: COLORS.brand, marginTop: 4 },
   modalBtn: { flex: 1, paddingVertical: 14, borderRadius: RADIUS.pill, alignItems: "center" },
-  couponCard: { flexDirection: "row", alignItems: "center", padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceTint, marginBottom: SPACING.sm, alignSelf: "stretch" },
+  couponCard: { flexDirection: "row", alignItems: "center", padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceTint, marginBottom: SPACING.sm },
   couponBadge: { backgroundColor: COLORS.brand, padding: SPACING.sm, borderRadius: RADIUS.sm, alignItems: "center", minWidth: 64 },
   couponPct: { color: "#fff", fontWeight: "900", fontSize: 18 },
   couponOff: { color: "#fff", fontWeight: "700", fontSize: 10 },
   couponCode: { fontWeight: "900", color: COLORS.textPrimary },
   couponDesc: { color: COLORS.textSecondary, fontSize: 12, marginTop: 2 },
   couponMin: { color: COLORS.textMuted, fontSize: 11, marginTop: 2 },
+  locCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", padding: SPACING.md, borderRadius: RADIUS.md, borderLeftWidth: 4, borderLeftColor: COLORS.brand, ...SHADOW.card },
+  locOk: { borderLeftColor: COLORS.success },
+  locBad: { borderLeftColor: COLORS.error },
+  locTitle: { fontWeight: "800", color: COLORS.textPrimary, fontSize: 14 },
+  locSub: { color: COLORS.textSecondary, fontSize: 12, marginTop: 2 },
+  locBtn: { backgroundColor: COLORS.brand, paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.pill },
+  locBtnTxt: { color: "#fff", fontWeight: "800", fontSize: 12 },
 });

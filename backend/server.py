@@ -32,6 +32,45 @@ DELIVERY_FEE = 30
 
 STATUS_FLOW = ["received", "preparing", "packed", "out_for_delivery", "delivered"]
 
+# Delivery zones — designed for easy multi-zone expansion.
+# Add another dict to serve additional areas.
+DELIVERY_ZONES = [
+    {
+        "id": "mezbaan_main",
+        "name": "Mezbaan Restro (Jamia Nagar)",
+        "lat": 28.554038,
+        "lng": 77.2974552,
+        "radius_km": 5.0,
+    },
+]
+
+
+def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Great-circle distance between two lat/lng points, in km."""
+    import math
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lng2 - lng1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return r * c
+
+
+def nearest_zone(lat: float, lng: float):
+    """Return (zone_dict, distance_km) for the closest deliverable zone, else (None, distance_to_nearest)."""
+    best_zone = None
+    best_distance = float("inf")
+    for z in DELIVERY_ZONES:
+        d = haversine_km(lat, lng, z["lat"], z["lng"])
+        if d < best_distance:
+            best_distance = d
+            if d <= z["radius_km"]:
+                best_zone = z
+    if best_zone:
+        return best_zone, best_distance
+    return None, best_distance
+
 
 # ----- Models -----
 def now_iso() -> str:
@@ -96,10 +135,12 @@ class PlaceOrderRequest(BaseModel):
     address: str
     phone: str
     name: str
-    payment_method: str  # "cod" | "upi"
+    payment_method: str  # "cod" (extensible: "razorpay", "upi", "wallet")
     coupon_code: Optional[str] = None
     notes: Optional[str] = None
     use_loyalty: bool = False
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 
 class OrderStatusUpdate(BaseModel):
@@ -251,6 +292,28 @@ async def root():
     return {"app": "Mezbaan Restro", "tagline": "Freshly Crafted, Honestly Served"}
 
 
+@api.get("/delivery/zones")
+async def delivery_zones():
+    """Public endpoint — used by the app to hydrate zone info."""
+    return {"zones": DELIVERY_ZONES}
+
+
+@api.get("/delivery/check")
+async def delivery_check(lat: float, lng: float):
+    """Given customer coords, return whether we deliver + distance to nearest branch."""
+    zone, distance = nearest_zone(lat, lng)
+    return {
+        "serviceable": zone is not None,
+        "distance_km": round(distance, 2),
+        "zone": zone,
+        "message": (
+            f"We deliver here! ({round(distance,1)} km away)"
+            if zone
+            else "Sorry! We will deliver in your area soon."
+        ),
+    }
+
+
 @api.post("/auth/signup")
 async def signup(req: SignupRequest):
     phone = req.phone.strip()
@@ -353,6 +416,16 @@ async def place_order(req: PlaceOrderRequest, current_user: dict = Depends(get_c
     if not req.items:
         raise HTTPException(status_code=400, detail="Cart is empty")
 
+    # Geofence: validate delivery is possible from customer's live coords
+    if req.lat is None or req.lng is None:
+        raise HTTPException(status_code=400, detail="Location required to place order")
+    zone, distance = nearest_zone(req.lat, req.lng)
+    if not zone:
+        raise HTTPException(
+            status_code=400,
+            detail="Sorry! We will deliver in your area soon.",
+        )
+
     coupon = None
     if req.coupon_code:
         coupon = await db.coupons.find_one({"code": req.coupon_code.upper(), "active": True}, {"_id": 0})
@@ -372,6 +445,11 @@ async def place_order(req: PlaceOrderRequest, current_user: dict = Depends(get_c
         "user_name": req.name,
         "user_phone": req.phone,
         "address": req.address,
+        "lat": req.lat,
+        "lng": req.lng,
+        "zone_id": zone["id"],
+        "zone_name": zone["name"],
+        "distance_km": round(distance, 2),
         "items": [i.dict() for i in req.items],
         "payment_method": req.payment_method,
         "coupon_code": req.coupon_code,

@@ -28,6 +28,9 @@ export const api = {
     request("/auth/signup", { method: "POST", body: JSON.stringify({ name, phone }) }, false),
   me: () => request("/auth/me"),
   toggleWishlist: (id: string) => request(`/auth/wishlist/${id}`, { method: "POST" }),
+  deliveryCheck: (lat: number, lng: number) =>
+    request(`/delivery/check?lat=${lat}&lng=${lng}`, {}, false),
+  deliveryZones: () => request("/delivery/zones", {}, false),
   menu: (category?: string, search?: string) => {
     const params = new URLSearchParams();
     if (category) params.append("category", category);

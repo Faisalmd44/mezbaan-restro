@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.restroorder.fa9uvz"
+      "bundleIdentifier": "com.emergent.restroorder.fa9uvz",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Check delivery availability in your area"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +21,8 @@
         "backgroundColor": "#000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.restroorder.fa9uvz"
+      "package": "com.emergent.restroorder.fa9uvz",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +40,7 @@
           "backgroundColor": "#000"
         }
       ],
+    ["expo-location", { "locationAlwaysAndWhenInUsePermission": "Check delivery availability in your area" }],
       "expo-font"
     ],
     "experiments": {
