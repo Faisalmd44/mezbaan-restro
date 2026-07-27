@@ -6,66 +6,114 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EXPO_NO_TELEMETRY: "1"
+
 jobs:
+  detect:
+    name: Detect App Directory
+    runs-on: ubuntu-latest
+    outputs:
+      app-dir: ${{ steps.detect.outputs.app-dir }}
+      pm: ${{ steps.detect.outputs.pm }}
+      lockfile: ${{ steps.detect.outputs.lockfile }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect Expo app directory and package manager
+        id: detect
+        run: |
+          # Search for the Expo app in common monorepo locations
+          APP_DIR="."
+          if [ -f frontend/package.json ]; then
+            APP_DIR="frontend"
+          elif [ -f app/package.json ]; then
+            APP_DIR="app"
+          fi
+          echo "app-dir=$APP_DIR" >> "$GITHUB_OUTPUT"
+
+          # Detect package manager from lockfile
+          if [ -f "$APP_DIR/yarn.lock" ]; then
+            echo "pm=yarn" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$APP_DIR/yarn.lock" >> "$GITHUB_OUTPUT"
+          elif [ -f "$APP_DIR/package-lock.json" ]; then
+            echo "pm=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$APP_DIR/package-lock.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "pm=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$APP_DIR/package-lock.json" >> "$GITHUB_OUTPUT"
+          fi
+
   quality:
     name: Type Check & Lint
     runs-on: ubuntu-latest
+    needs: detect
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: ${{ needs.detect.outputs.pm }}
+          cache-dependency-path: ${{ needs.detect.outputs.lockfile }}
 
       - name: Install dependencies
-        run: npm ci
+        working-directory: ${{ needs.detect.outputs.app-dir }}
+        run: ${{ needs.detect.outputs.pm == 'yarn' && 'yarn install --frozen-lockfile' || 'npm ci' }}
 
       - name: TypeScript check
+        working-directory: ${{ needs.detect.outputs.app-dir }}
         run: npx tsc --noEmit
 
       - name: Lint
+        working-directory: ${{ needs.detect.outputs.app-dir }}
         run: npx expo lint --max-warnings 0 || true
 
   web-build:
     name: Web Build
     runs-on: ubuntu-latest
-    needs: quality
+    needs: [detect, quality]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: ${{ needs.detect.outputs.pm }}
+          cache-dependency-path: ${{ needs.detect.outputs.lockfile }}
 
       - name: Install dependencies
-        run: npm ci
+        working-directory: ${{ needs.detect.outputs.app-dir }}
+        run: ${{ needs.detect.outputs.pm == 'yarn' && 'yarn install --frozen-lockfile' || 'npm ci' }}
 
       - name: Expo web export
+        working-directory: ${{ needs.detect.outputs.app-dir }}
         run: npx expo export --platform web
         env:
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          METRO_CACHE_ROOT: /tmp/metro-cache
 
       - name: Upload web build
         uses: actions/upload-artifact@v4
         with:
           name: web-build
-          path: dist
+          path: ${{ needs.detect.outputs.app-dir }}/dist
           retention-days: 14
 
   android-build:
     name: Android Debug APK & Release AAB
     runs-on: ubuntu-latest
-    needs: quality
+    needs: [detect, quality]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: ${{ needs.detect.outputs.pm }}
+          cache-dependency-path: ${{ needs.detect.outputs.lockfile }}
 
       - uses: actions/setup-java@v4
         with:
@@ -78,35 +126,33 @@ jobs:
           packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
       - name: Install dependencies
-        run: npm ci
+        working-directory: ${{ needs.detect.outputs.app-dir }}
+        run: ${{ needs.detect.outputs.pm == 'yarn' && 'yarn install --frozen-lockfile' || 'npm ci' }}
 
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      - name: EAS Android prebuild
+      - name: Expo Android prebuild
+        working-directory: ${{ needs.detect.outputs.app-dir }}
         run: npx expo prebuild --platform android --no-install
+        env:
+          METRO_CACHE_ROOT: /tmp/metro-cache
 
       - name: Build debug APK
-        working-directory: android
+        working-directory: ${{ needs.detect.outputs.app-dir }}/android
         run: ./gradlew assembleDebug
 
       - name: Build release AAB
-        working-directory: android
+        working-directory: ${{ needs.detect.outputs.app-dir }}/android
         run: ./gradlew bundleRelease
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: ${{ needs.detect.outputs.app-dir }}/android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
 
       - name: Upload release AAB
         uses: actions/upload-artifact@v4
         with:
           name: android-release-aab
-          path: android/app/build/outputs/bundle/release/*.aab
+          path: ${{ needs.detect.outputs.app-dir }}/android/app/build/outputs/bundle/release/*.aab
           retention-days: 30
