@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { Image, View, StyleSheet, ActivityIndicator, InteractionManager } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -13,9 +14,24 @@ import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
 import { CartProvider } from '@/lib/cart-context';
 import { COLORS } from '@/lib/theme';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { Text } from '@/components/Text';
 
 SplashScreen.preventAutoHideAsync();
+
+function LogoScreen() {
+  return (
+    <View style={styles.logoScreen}>
+      <Image
+        source={require('../assets/images/icon.png')}
+        style={styles.logo}
+        resizeMode="contain"
+        fadeDuration={0}
+      />
+      <Text variant="label" color="gold" weight="semiBold" style={styles.logoText}>MEZBAAN RESTRO</Text>
+      <ActivityIndicator size="small" color={COLORS.gold} style={styles.spinner} />
+    </View>
+  );
+}
 
 function Gate({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -26,20 +42,18 @@ function Gate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-    if (!session && !inAuthGroup) {
-      router.replace('/(auth)/login');
-    } else if (session && inAuthGroup) {
-      router.replace('/(tabs)/home');
-    }
-  }, [session, loading, inAuthGroup]);
+    const redirect = () => {
+      if (!session && !inAuthGroup) {
+        router.replace('/(auth)/login');
+      } else if (session && inAuthGroup) {
+        router.replace('/(tabs)/home');
+      }
+    };
+    const handle = InteractionManager.runAfterInteractions(redirect);
+    return () => handle.cancel();
+  }, [session, loading, inAuthGroup, router]);
 
-  if (loading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={COLORS.gold} />
-      </View>
-    );
-  }
+  if (loading) return <LogoScreen />;
 
   return <>{children}</>;
 }
@@ -54,11 +68,15 @@ export default function RootLayout() {
     'PlusJakartaSans-Bold': PlusJakartaSans_700Bold,
   });
 
+  const hideSplash = useCallback(async () => {
+    try { await SplashScreen.hideAsync(); } catch { /* already hidden */ }
+  }, []);
+
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      hideSplash();
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsLoaded, fontError, hideSplash]);
 
   if (!fontsLoaded && !fontError) {
     return null;
@@ -91,10 +109,23 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  loading: {
+  logoScreen: {
     flex: 1,
     backgroundColor: COLORS.black,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 16,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    borderRadius: 22,
+  },
+  logoText: {
+    letterSpacing: 4,
+    fontSize: 14,
+  },
+  spinner: {
+    marginTop: 8,
   },
 });
