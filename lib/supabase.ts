@@ -7,27 +7,38 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY in .env — auth will not work until set.');
+  console.warn('[Supabase] Missing env vars — auth will be disabled until EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are set.');
 }
 
+// SecureStore is only available on native; AsyncStorage works everywhere.
+// On native we prefer SecureStore (encrypted) with AsyncStorage fallback.
 const storageAdapter = Platform.OS === 'web'
   ? {
-      getItem: async (key: string) => localStorage.getItem(key) ?? null,
-      setItem: async (key: string, value: string) => localStorage.setItem(key, value),
-      removeItem: async (key: string) => localStorage.removeItem(key),
+      getItem: async (key: string) => {
+        try { return localStorage.getItem(key); } catch { return null; }
+      },
+      setItem: async (key: string, value: string) => {
+        try { localStorage.setItem(key, value); } catch { /* ignore */ }
+      },
+      removeItem: async (key: string) => {
+        try { localStorage.removeItem(key); } catch { /* ignore */ }
+      },
     }
   : {
       getItem: async (key: string) => {
-        try { return (await SecureStore.getItemAsync(key)) ?? null; }
-        catch { return (await AsyncStorage.getItem(key)) ?? null; }
+        try {
+          const v = await SecureStore.getItemAsync(key);
+          if (v != null) return v;
+        } catch { /* SecureStore may fail on emulator */ }
+        try { return await AsyncStorage.getItem(key); } catch { return null; }
       },
       setItem: async (key: string, value: string) => {
-        try { await SecureStore.setItemAsync(key, value); }
-        catch { await AsyncStorage.setItem(key, value); }
+        try { await SecureStore.setItemAsync(key, value); return; } catch { /* fall through */ }
+        try { await AsyncStorage.setItem(key, value); } catch { /* ignore */ }
       },
       removeItem: async (key: string) => {
-        try { await SecureStore.deleteItemAsync(key); }
-        catch { await AsyncStorage.removeItem(key); }
+        try { await SecureStore.deleteItemAsync(key); } catch { /* fall through */ }
+        try { await AsyncStorage.removeItem(key); } catch { /* ignore */ }
       },
     };
 
@@ -37,6 +48,7 @@ export const supabase = createClient(
   {
     auth: {
       storage: storageAdapter,
+      storageKey: 'mezbaan-auth',
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: Platform.OS === 'web',
