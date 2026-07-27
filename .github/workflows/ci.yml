@@ -129,6 +129,13 @@ jobs:
         working-directory: ${{ needs.detect.outputs.app-dir }}
         run: ${{ needs.detect.outputs.pm == 'yarn' && 'yarn install --frozen-lockfile' || 'npm ci' }}
 
+      - name: Ensure splash icon asset exists
+        working-directory: ${{ needs.detect.outputs.app-dir }}
+        run: |
+          if [ ! -f assets/images/splash-icon.png ] && [ -f assets/images/splash-image.png ]; then
+            cp assets/images/splash-image.png assets/images/splash-icon.png
+          fi
+
       - name: Expo Android prebuild
         working-directory: ${{ needs.detect.outputs.app-dir }}
         run: npx expo prebuild --platform android --no-install
