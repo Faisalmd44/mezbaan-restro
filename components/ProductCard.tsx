@@ -1,7 +1,7 @@
 import { Pressable, View, StyleSheet } from 'react-native';
 import { Plus, Heart, Star } from 'lucide-react-native';
 import { COLORS, SPACING, RADIUS } from '@/lib/theme';
-import type { Product } from '@/lib/types';
+import type { MenuItem } from '@/lib/types';
 import { CachedImage } from './CachedImage';
 import { Badge } from './Badge';
 import { Text } from './Text';
@@ -9,33 +9,32 @@ import { formatCurrency } from '@/lib/utils';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-type Props = { product: Product; onPress: (id: string) => void; onAdd?: (product: Product) => void; isFavorite?: boolean };
+type Props = { item: MenuItem; onPress: (id: string) => void; onAdd?: (item: MenuItem) => void; isFavorite?: boolean };
 
-export function ProductCard({ product, onPress, onAdd, isFavorite }: Props) {
+export function ProductCard({ item, onPress, onAdd, isFavorite }: Props) {
   const [fav, setFav] = useState(isFavorite ?? false);
 
   const toggleFav = async () => {
     const prev = fav;
     setFav(!prev);
     try {
-      const { data: existing } = await supabase.from('favorites').select('id').eq('product_id', product.id).maybeSingle();
+      const { data: existing } = await supabase.from('favorites').select('id').eq('item_id', item.id).maybeSingle();
       if (existing) {
         await supabase.from('favorites').delete().eq('id', (existing as { id: string }).id);
         setFav(false);
       } else {
-        await supabase.from('favorites').insert({ product_id: product.id });
+        await supabase.from('favorites').insert({ item_id: item.id });
         setFav(true);
       }
     } catch { setFav(prev); }
   };
 
   return (
-    <Pressable onPress={() => onPress(product.id)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+    <Pressable onPress={() => onPress(item.id)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.imageWrap}>
-        <CachedImage uri={product.image_url} style={styles.image} />
+        <CachedImage uri={item.image} style={styles.image} />
         <View style={styles.badges}>
-          {product.is_bestseller && <Badge type="bestseller" small />}
-          {product.is_popular && <Badge type="popular" small />}
+          {item.is_bestseller && <Badge type="bestseller" small />}
         </View>
         <Pressable onPress={toggleFav} style={styles.heartBtn}>
           <Heart size={16} color={fav ? COLORS.gold : COLORS.onSurface} fill={fav ? COLORS.gold : 'transparent'} />
@@ -43,18 +42,18 @@ export function ProductCard({ product, onPress, onAdd, isFavorite }: Props) {
       </View>
       <View style={styles.body}>
         <View style={styles.titleRow}>
-          <Badge type={product.is_veg ? 'veg' : 'nonveg'} small />
+          <Badge type={item.is_veg ? 'veg' : 'nonveg'} small />
           <View style={styles.rating}>
             <Star size={11} color={COLORS.gold} fill={COLORS.gold} />
-            <Text variant="caption" color="gold" weight="semiBold">{Number(product.rating).toFixed(1)}</Text>
+            <Text variant="caption" color="gold" weight="semiBold">{Number(item.rating).toFixed(1)}</Text>
           </View>
         </View>
-        <Text variant="body" weight="semiBold" numberOfLines={1} style={styles.name}>{product.name}</Text>
-        <Text variant="caption" color="secondary" numberOfLines={2} style={styles.desc}>{product.description}</Text>
+        <Text variant="body" weight="semiBold" numberOfLines={1} style={styles.name}>{item.name}</Text>
+        <Text variant="caption" color="secondary" numberOfLines={2} style={styles.desc}>{item.description}</Text>
         <View style={styles.footer}>
-          <Text variant="price" color="gold">{formatCurrency(Number(product.price))}</Text>
+          <Text variant="price" color="gold">{formatCurrency(Number(item.price))}</Text>
           {onAdd && (
-            <Pressable onPress={() => onAdd(product)} disabled={!product.is_available} style={({ pressed }) => [styles.addBtn, pressed && styles.pressed, !product.is_available && styles.disabled]}>
+            <Pressable onPress={() => onAdd(item)} disabled={!item.in_stock} style={({ pressed }) => [styles.addBtn, pressed && styles.pressed, !item.in_stock && styles.disabled]}>
               <Plus size={16} color={COLORS.onGold} />
             </Pressable>
           )}
