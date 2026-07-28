@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { View, Image, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { useAuth } from '@/lib/auth-context';
 import { COLORS } from '@/lib/theme';
 import { Text } from '@/components/Text';
@@ -12,6 +13,13 @@ import { Text } from '@/components/Text';
 export default function IndexScreen() {
   const { session, loading } = useAuth();
   const router = useRouter();
+
+  // Extra safety net: hide the native splash the moment this screen mounts,
+  // regardless of auth state. The root layout already hides it on font load,
+  // but this guarantees it is hidden even if that path was skipped.
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -26,7 +34,7 @@ export default function IndexScreen() {
   return (
     <View style={styles.container}>
       <Image
-        source={require('../assets/images/icon.png')}
+        source={require('../assets/images/splash.png')}
         style={styles.logo}
         resizeMode="contain"
         fadeDuration={0}
@@ -48,8 +56,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   logo: {
-    width: 140,
-    height: 140,
+    // ~45% of a typical 390pt mobile width, centered.
+    width: 175,
+    height: 175,
   },
   brand: {
     letterSpacing: 4,
