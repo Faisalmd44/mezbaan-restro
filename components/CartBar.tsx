@@ -30,9 +30,27 @@ export function CartBar({ count, total, onPress }: Props) {
 }
 
 const styles = StyleSheet.create({
-  press: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.sm },
+  press: {
+  position: 'absolute',
+  left: SPACING.lg,
+  right: SPACING.lg,
+  bottom: 85,
+  zIndex: 999,
+},
   pressed: { transform: [{ scale: 0.98 }] },
-  bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: RADIUS.pill, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md },
+  bar: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  borderRadius: RADIUS.pill,
+  paddingHorizontal: SPACING.lg,
+  paddingVertical: SPACING.md,
+
+  elevation: 10,
+  shadowOpacity: 0.25,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 4 },
+},
   left: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, flex: 1 },
   bagWrap: { position: 'relative', width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' },
   countBadge: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: COLORS.black, borderWidth: 1.5, borderColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },

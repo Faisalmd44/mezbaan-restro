@@ -47,11 +47,65 @@ jobs:
             echo "lockfile=$APP_DIR/package-lock.json" >> "$GITHUB_OUTPUT"
           fi
 
+  quality:
+    name: Type Check & Lint
+    runs-on: ubuntu-latest
+    needs: detect
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: ${{ needs.detect.outputs.pm }}
+          cache-dependency-path: ${{ needs.detect.outputs.lockfile }}
+
+      - name: Install dependencies
+        working-directory: ${{ needs.detect.outputs.app-dir }}
+        run: ${{ needs.detect.outputs.pm == 'yarn' && 'yarn install --frozen-lockfile' || 'npm ci' }}
+
+      - name: TypeScript check
+        working-directory: ${{ needs.detect.outputs.app-dir }}
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: ${{ needs.detect.outputs.app-dir }}
+        run: npx expo lint --max-warnings 0 || true
+
+  web-build:
+    name: Web Build
+    runs-on: ubuntu-latest
+    needs: [detect, quality]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: ${{ needs.detect.outputs.pm }}
+          cache-dependency-path: ${{ needs.detect.outputs.lockfile }}
+
+      - name: Install dependencies
+        working-directory: ${{ needs.detect.outputs.app-dir }}
+        run: ${{ needs.detect.outputs.pm == 'yarn' && 'yarn install --frozen-lockfile' || 'npm ci' }}
+
+      - name: Expo web export
+        working-directory: ${{ needs.detect.outputs.app-dir }}
+        run: npx expo export --platform web
+        env:
+          METRO_CACHE_ROOT: /tmp/metro-cache
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: ${{ needs.detect.outputs.app-dir }}/dist
+          retention-days: 14
 
   android-build:
     name: Android Debug APK & Release AAB
     runs-on: ubuntu-latest
-    needs: detect
+    needs: [detect, quality]
     steps:
       - uses: actions/checkout@v4
 
@@ -92,9 +146,20 @@ jobs:
         working-directory: ${{ needs.detect.outputs.app-dir }}/android
         run: ./gradlew assembleDebug
 
+      - name: Build release AAB
+        working-directory: ${{ needs.detect.outputs.app-dir }}/android
+        run: ./gradlew bundleRelease
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk
           path: ${{ needs.detect.outputs.app-dir }}/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
+      - name: Upload release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-aab
+          path: ${{ needs.detect.outputs.app-dir }}/android/app/build/outputs/bundle/release/*.aab
           retention-days: 30

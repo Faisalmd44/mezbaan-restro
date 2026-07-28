@@ -35,16 +35,19 @@ export default function HomeScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [cats, off, pop, best, news, combo, favs] = await Promise.all([
-        fetchCategories(), fetchOffers(),
-        fetchProducts({ badge: 'is_popular', limit: 6 }),
-        fetchProducts({ badge: 'is_bestseller', limit: 6 }),
-        fetchProducts({ badge: 'is_new', limit: 6 }),
-        fetchProducts({ badge: 'is_combo', limit: 6 }),
-        fetchFavoriteProductIds().catch(() => new Set<string>()),
-      ]);
-      setCategories(cats); setOffers(off); setPopular(pop);
-      setBestsellers(best); setNewArrivals(news); setCombos(combo); setFavIds(favs);
+const [cats, favs, items] = await Promise.all([
+  fetchCategories(),
+  fetchFavoriteProductIds().catch(() => new Set<string>()),
+  fetchProducts({ limit: 20 }),
+]);
+
+  setCategories(cats);
+  setFavIds(favs);
+  setOffers([]);
+  setPopular(items);
+  setBestsellers(items.filter(p => p.is_bestseller));
+  setNewArrivals([]);
+  setCombos([]);
     } catch (e) { console.warn('Home load error', e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);

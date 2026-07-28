@@ -78,6 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let subscription: { unsubscribe: () => void } | undefined;
     try {
       ({ data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+       console.log("AUTH EVENT:", _event);
+       console.log("AUTH SESSION:", newSession);
         setSession(newSession);
         if (newSession?.user) {
           safeLoadProfile(newSession.user.id);
@@ -92,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth
       .getSession()
       .then(({ data }) => {
+       console.log("GET SESSION:", data.session);
         if (settled) return;
         setSession(data.session);
         if (data.session?.user) {
@@ -115,7 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     if (!isSupabaseConfigured) return { error: 'Supabase not configured — set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.' };
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+     console.log("LOGIN DATA:", data);
+     console.log("LOGIN ERROR:", error);
       return { error: error?.message ?? null };
     } catch (e) {
       return { error: e instanceof Error ? e.message : 'Sign in failed' };
