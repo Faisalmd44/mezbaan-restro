@@ -1,12 +1,8 @@
 import { supabase } from './supabase';
 import type {
-  Category,
-  Product,
-  Offer,
+  MenuItem,
   Coupon,
-  DeliveryZone,
   Address,
-  AddressLabel,
   Favorite,
   Order,
   OrderStatus,
@@ -15,7 +11,6 @@ import type {
   Wallet,
   WalletTransaction,
   AppNotification,
-  AppSettings,
   Payment,
   RazorpayCreateOrderResponse,
   RazorpayVerifyResponse,
@@ -23,86 +18,87 @@ import type {
 
 /* ---------------- Catalog (public, readable by anon) ---------------- */
 
-export async function fetchCategories(): Promise<Category[]> {
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as Category[];
-}
-
-export async function fetchProducts(opts?: {
-  categoryId?: string;
+export async function fetchMenuItems(opts?: {
+  category?: string;
   search?: string;
   vegOnly?: boolean;
-  badge?: 'is_bestseller' | 'is_popular' | 'is_new' | 'is_combo';
+  bestsellerOnly?: boolean;
   limit?: number;
-}): Promise<Product[]> {
+}): Promise<MenuItem[]> {
   let q = supabase
-    .from('products')
-    .select('*, category:categories(*), product_variants(*), product_addons(*)')
-    .eq('is_available', true)
-    .order('sort_order', { ascending: true });
-  if (opts?.categoryId) q = q.eq('category_id', opts.categoryId);
+    .from('menu_items')
+    .select('*')
+    .eq('in_stock', true)
+    .order('created_at', { ascending: false });
+  if (opts?.category && opts.category !== 'All') q = q.eq('category', opts.category);
   if (opts?.vegOnly) q = q.eq('is_veg', true);
-  if (opts?.badge) q = q.eq(opts.badge, true);
+  if (opts?.bestsellerOnly) q = q.eq('is_bestseller', true);
   if (opts?.search) q = q.ilike('name', `%${opts.search}%`);
   if (opts?.limit) q = q.limit(opts.limit);
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as Product[];
+  return (data ?? []) as MenuItem[];
 }
 
-export async function fetchProductById(id: string): Promise<Product | null> {
+export async function fetchMenuItemById(id: string): Promise<MenuItem | null> {
   const { data, error } = await supabase
-    .from('products')
-    .select('*, category:categories(*), product_variants(*), product_addons(*)')
+    .from('menu_items')
+    .select('*')
     .eq('id', id)
     .maybeSingle();
   if (error) throw error;
-  return data as Product | null;
+  return data as MenuItem | null;
 }
 
-export async function fetchSimilarProducts(productId: string, categoryId: string, limit = 6): Promise<Product[]> {
+export async function fetchSimilarItems(itemId: string, category: string, limit = 6): Promise<MenuItem[]> {
   const { data, error } = await supabase
-    .from('products')
+    .from('menu_items')
     .select('*')
-    .eq('category_id', categoryId)
-    .eq('is_available', true)
-    .neq('id', productId)
+    .eq('category', category)
+    .eq('in_stock', true)
+    .neq('id', itemId)
     .limit(limit);
   if (error) throw error;
-  return (data ?? []) as Product[];
+  return (data ?? []) as MenuItem[];
 }
 
-export async function fetchOffers(): Promise<Offer[]> {
+export async function fetchCategories(): Promise<string[]> {
   const { data, error } = await supabase
-    .from('offers')
-    .select('*')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true });
+    .from('menu_items')
+    .select('category')
+    .eq('in_stock', true);
   if (error) throw error;
-  return (data ?? []) as Offer[];
+  const cats = new Set((data ?? []).map((r: { category: string }) => r.category));
+  return Array.from(cats).sort();
+}
+
+export async function fetchBestsellers(limit = 10): Promise<MenuItem[]> {
+  const { data, error } = await supabase
+    .from('menu_items')
+    .select('*')
+    .eq('in_stock', true)
+    .eq('is_bestseller', true)
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as MenuItem[];
 }
 
 export async function fetchCoupons(): Promise<Coupon[]> {
   const { data, error } = await supabase
     .from('coupons')
     .select('*')
-    .eq('is_active', true)
+    .eq('active', true)
     .order('min_order', { ascending: true });
   if (error) throw error;
   return (data ?? []) as Coupon[];
 }
 
-export async function validateCoupon(code: string, subtotal: number, isFirstOrder: boolean): Promise<{ coupon: Coupon | null; error: string | null }> {
+export async function validateCoupon(code: string, subtotal: number): Promise<{ coupon: Coupon | null; error: string | null }> {
   const { data, error } = await supabase
     .from('coupons')
     .select('*')
     .eq('code', code.toUpperCase())
-    .eq('is_active', true)
+    .eq('active', true)
     .maybeSingle();
   if (error) throw error;
   if (!data) return { coupon: null, error: 'Invalid coupon code' };
@@ -110,42 +106,7 @@ export async function validateCoupon(code: string, subtotal: number, isFirstOrde
   if (subtotal < Number(c.min_order)) {
     return { coupon: null, error: `Minimum order ₹${c.min_order} required for this coupon` };
   }
-  if (c.first_order_only && !isFirstOrder) {
-    return { coupon: null, error: 'This coupon is valid only on your first order' };
-  }
   return { coupon: c, error: null };
-}
-
-export async function fetchDeliveryZones(): Promise<DeliveryZone[]> {
-  const { data, error } = await supabase
-    .from('delivery_zones')
-    .select('*')
-    .eq('is_active', true);
-  if (error) throw error;
-  return (data ?? []) as DeliveryZone[];
-}
-
-export async function fetchAppSettings(): Promise<AppSettings> {
-  const { data, error } = await supabase.from('app_settings').select('*');
-  if (error) throw error;
-  const map: Record<string, string> = {};
-  (data ?? []).forEach((row: { key: string; value: string }) => {
-    const v = row.value;
-    map[row.key] = typeof v === 'string' ? v.replace(/^"|"$/g, '') : String(v);
-  });
-  return {
-    delivery_fee: Number(map.delivery_fee ?? 30),
-    free_delivery_threshold: Number(map.free_delivery_threshold ?? 250),
-    tax_rate: Number(map.tax_rate ?? 5),
-    default_currency: map.default_currency ?? 'INR',
-    razorpay_upi_id: map.razorpay_upi_id ?? '',
-    restaurant_name: map.restaurant_name ?? 'Mezbaan Restro',
-    restaurant_tagline: map.restaurant_tagline ?? 'Freshly Crafted, Honestly Served',
-    restaurant_phone: map.restaurant_phone ?? '',
-    restaurant_address: map.restaurant_address ?? '',
-    min_order_value: Number(map.min_order_value ?? 0),
-    support_email: map.support_email ?? '',
-  };
 }
 
 /* ---------------- Addresses (owner-scoped) ---------------- */
@@ -160,13 +121,13 @@ export async function fetchAddresses(): Promise<Address[]> {
 }
 
 export async function addAddress(input: {
-  label: AddressLabel;
-  full_address: string;
-  landmark?: string;
-  lat?: number;
-  lng?: number;
+  label: string;
+  line: string;
   is_default?: boolean;
 }): Promise<Address> {
+  if (input.is_default) {
+    await supabase.from('addresses').update({ is_default: false }).neq('id', '00000000-0000-0000-0000-000000000000');
+  }
   const { data, error } = await supabase
     .from('addresses')
     .insert(input)
@@ -191,29 +152,29 @@ export async function deleteAddress(id: string): Promise<void> {
 export async function fetchFavorites(): Promise<Favorite[]> {
   const { data, error } = await supabase
     .from('favorites')
-    .select('*, product:products(*)')
+    .select('*, menu_item:menu_items(*)')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []) as Favorite[];
 }
 
-export async function fetchFavoriteProductIds(): Promise<Set<string>> {
-  const { data, error } = await supabase.from('favorites').select('product_id');
+export async function fetchFavoriteItemIds(): Promise<Set<string>> {
+  const { data, error } = await supabase.from('favorites').select('item_id');
   if (error) throw error;
-  return new Set((data ?? []).map((r: { product_id: string }) => r.product_id));
+  return new Set((data ?? []).map((r: { item_id: string }) => r.item_id));
 }
 
-export async function toggleFavorite(productId: string): Promise<boolean> {
+export async function toggleFavorite(itemId: string): Promise<boolean> {
   const { data: existing } = await supabase
     .from('favorites')
     .select('id')
-    .eq('product_id', productId)
+    .eq('item_id', itemId)
     .maybeSingle();
   if (existing) {
     await supabase.from('favorites').delete().eq('id', (existing as { id: string }).id);
     return false;
   }
-  const { error } = await supabase.from('favorites').insert({ product_id: productId });
+  const { error } = await supabase.from('favorites').insert({ item_id: itemId });
   if (error) throw error;
   return true;
 }
@@ -229,17 +190,15 @@ export async function placeOrder(input: {
   total: number;
   coupon_code: string | null;
   payment_method: PaymentMethod;
-  delivery_address: Address;
+  user_name: string;
+  user_phone: string;
+  address: string;
   notes?: string;
-  zone_id?: string | null;
-  zone_name?: string | null;
-  distance_km?: number | null;
 }): Promise<Order> {
-  const orderNo = `MZB${Date.now().toString().slice(-10)}`;
+  const orderNo = `MEZ-${Date.now()}`;
   const payload = {
     order_no: orderNo,
     status: 'received' as OrderStatus,
-    items: input.items,
     subtotal: input.subtotal,
     discount: input.discount,
     delivery_fee: input.delivery_fee,
@@ -248,11 +207,10 @@ export async function placeOrder(input: {
     coupon_code: input.coupon_code,
     payment_method: input.payment_method,
     payment_status: 'pending' as const,
-    delivery_address: input.delivery_address,
+    user_name: input.user_name,
+    user_phone: input.user_phone,
+    address: input.address,
     notes: input.notes ?? null,
-    zone_id: input.zone_id ?? null,
-    zone_name: input.zone_name ?? null,
-    distance_km: input.distance_km ?? null,
     status_history: [{ status: 'received' as OrderStatus, at: new Date().toISOString() }],
   };
   const { data, error } = await supabase.from('orders').insert(payload).select().single();
@@ -262,13 +220,11 @@ export async function placeOrder(input: {
   if (input.items.length) {
     const rows = input.items.map((i) => ({
       order_id: order.id,
-      product_id: i.product_id,
+      item_id: i.item_id,
       name: i.name,
       image_url: i.image_url,
       price: i.unit_price,
       quantity: i.quantity,
-      variant_name: i.variant_name,
-      addons: i.addon_names.map((name) => ({ name, price: 0 })),
     }));
     await supabase.from('order_items').insert(rows);
   }
@@ -286,7 +242,7 @@ export async function placeOrder(input: {
 export async function fetchOrders(): Promise<Order[]> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*')
+    .select('*, order_items(*)')
     .order('created_at', { ascending: false })
     .limit(100);
   if (error) throw error;
@@ -296,7 +252,7 @@ export async function fetchOrders(): Promise<Order[]> {
 export async function fetchOrderById(id: string): Promise<Order | null> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*')
+    .select('*, order_items(*)')
     .eq('id', id)
     .maybeSingle();
   if (error) throw error;
@@ -428,3 +384,18 @@ export async function fetchPaymentsForOrder(orderId: string): Promise<Payment[]>
   if (error) throw error;
   return (data ?? []) as Payment[];
 }
+
+/* ---------------- App Settings (hardcoded defaults) ---------------- */
+
+export const APP_SETTINGS = {
+  delivery_fee: 30,
+  free_delivery_threshold: 250,
+  tax_rate: 5,
+  default_currency: 'INR',
+  restaurant_name: 'Mezbaan',
+  restaurant_tagline: 'Freshly Crafted, Honestly Served',
+  restaurant_phone: '',
+  restaurant_address: '',
+  min_order_value: 0,
+  support_email: '',
+};
