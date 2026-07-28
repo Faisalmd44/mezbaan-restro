@@ -1,14 +1,10 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { Platform } from 'react-native';
-import type { CartLineSnapshot, Product, ProductVariant, ProductAddon, Coupon, Address, PaymentMethod } from './types';
+import type { MenuItem, Coupon, Address, PaymentMethod, CartLineSnapshot } from './types';
 import { useAuth } from './auth-context';
 
 const CART_KEY = (uid: string | undefined) => `mezbaan_cart_${uid ?? 'guest'}`;
 
-// Platform-safe storage. On web we use localStorage; on native we lazily
-// import AsyncStorage. Both paths are wrapped in try/catch so a storage
-// failure (private mode, quota, missing native module) can never crash the
-// app or leave the splash hanging.
 const storage = {
   getItem: async (key: string): Promise<string | null> => {
     try {
@@ -28,16 +24,14 @@ const storage = {
       const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
       await AsyncStorage.setItem(key, value);
     } catch {
-      /* ignore quota / privacy errors */
+      /* ignore */
     }
   },
 };
 
 export type CartItem = {
   key: string;
-  product: Product;
-  variant: ProductVariant | null;
-  addons: ProductAddon[];
+  item: MenuItem;
   quantity: number;
   notes?: string;
 };
@@ -46,7 +40,6 @@ type CartContextValue = {
   items: CartItem[];
   count: number;
   subtotal: number;
-  addonsTotal: number;
   coupon: Coupon | null;
   couponCode: string | null;
   discount: number;
@@ -56,7 +49,7 @@ type CartContextValue = {
   selectedAddress: Address | null;
   paymentMethod: PaymentMethod;
   orderNotes: string;
-  addItem: (product: Product, variant: ProductVariant | null, addons: ProductAddon[], quantity?: number) => void;
+  addItem: (item: MenuItem, quantity?: number) => void;
   updateQty: (key: string, qty: number) => void;
   removeItem: (key: string) => void;
   clear: () => void;
@@ -102,15 +95,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     storage.setItem(key, JSON.stringify({ items, couponCode }));
   }, [items, couponCode, user?.id]);
 
-  const makeKey = (p: Product, v: ProductVariant | null, a: ProductAddon[]) =>
-    [p.id, v?.id ?? 'base', a.map((x) => x.id).sort().join('+')].join('|');
-
-  const addItem = useCallback((product: Product, variant: ProductVariant | null, addons: ProductAddon[], quantity = 1) => {
-    const key = makeKey(product, variant, addons);
+  const addItem = useCallback((item: MenuItem, quantity = 1) => {
+    const key = item.id;
     setItems((prev) => {
       const existing = prev.find((i) => i.key === key);
       if (existing) { return prev.map((i) => (i.key === key ? { ...i, quantity: i.quantity + quantity } : i)); }
-      return [...prev, { key, product, variant, addons, quantity }];
+      return [...prev, { key, item, quantity }];
     });
   }, []);
 
@@ -125,15 +115,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const applyCoupon = useCallback((c: Coupon) => { setCoupon(c); setCouponCode(c.code); }, []);
   const removeCoupon = useCallback(() => { setCoupon(null); setCouponCode(null); }, []);
 
-  const addonsTotal = items.reduce((sum, i) => sum + i.addons.reduce((s, a) => s + Number(a.price), 0) * i.quantity, 0);
-  const subtotal = items.reduce((sum, i) => sum + (Number(i.variant?.price ?? i.product.price) + i.addons.reduce((s, a) => s + Number(a.price), 0)) * i.quantity, 0);
+  const subtotal = items.reduce((sum, i) => sum + Number(i.item.price) * i.quantity, 0);
   const count = items.reduce((sum, i) => sum + i.quantity, 0);
 
   let discount = 0;
   if (coupon && subtotal >= Number(coupon.min_order)) {
     if (coupon.discount_type === 'percent') {
       discount = (subtotal * Number(coupon.discount_value)) / 100;
-      if (coupon.max_discount > 0) discount = Math.min(discount, Number(coupon.max_discount));
     } else { discount = Number(coupon.discount_value); }
     discount = Math.round(discount * 100) / 100;
   }
@@ -143,7 +131,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const total = Math.max(0, taxableBase + deliveryFee + tax);
 
   const value: CartContextValue = {
-    items, count, subtotal: Math.round(subtotal * 100) / 100, addonsTotal: Math.round(addonsTotal * 100) / 100,
+    items, count, subtotal: Math.round(subtotal * 100) / 100,
     coupon, couponCode, discount, deliveryFee, tax, total, selectedAddress, paymentMethod, orderNotes,
     addItem, updateQty, removeItem, clear, applyCoupon, removeCoupon, setSelectedAddress, setPaymentMethod, setOrderNotes,
     freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD, taxRate: TAX_RATE, deliveryFeeBase: DELIVERY_FEE_BASE,
@@ -160,15 +148,11 @@ export function useCart() {
 
 export function toSnapshots(items: CartItem[]): CartLineSnapshot[] {
   return items.map((i) => {
-    const base = Number(i.variant?.price ?? i.product.price);
-    const addonsTotal = i.addons.reduce((s, a) => s + Number(a.price), 0);
-    const unit = base + addonsTotal;
+    const unit = Number(i.item.price);
     return {
-      product_id: i.product.id, name: i.product.name, image_url: i.product.image_url,
-      base_price: base, unit_price: unit, quantity: i.quantity,
-      variant_id: i.variant?.id ?? null, variant_name: i.variant?.name ?? null,
-      addon_ids: i.addons.map((a) => a.id), addon_names: i.addons.map((a) => a.name),
-      addons_total: addonsTotal, line_total: Math.round(unit * i.quantity * 100) / 100,
+      item_id: i.item.id, name: i.item.name, image_url: i.item.image,
+      unit_price: unit, quantity: i.quantity,
+      line_total: Math.round(unit * i.quantity * 100) / 100,
     };
   });
 }
