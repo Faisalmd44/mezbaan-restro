@@ -1,9 +1,37 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import type { CartLineSnapshot, Product, ProductVariant, ProductAddon, Coupon, Address, PaymentMethod } from './types';
 import { useAuth } from './auth-context';
 
 const CART_KEY = (uid: string | undefined) => `mezbaan_cart_${uid ?? 'guest'}`;
+
+// Platform-safe storage. On web we use localStorage; on native we lazily
+// import AsyncStorage. Both paths are wrapped in try/catch so a storage
+// failure (private mode, quota, missing native module) can never crash the
+// app or leave the splash hanging.
+const storage = {
+  getItem: async (key: string): Promise<string | null> => {
+    try {
+      if (Platform.OS === 'web') return localStorage.getItem(key);
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      return await AsyncStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.setItem(key, value);
+        return;
+      }
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      await AsyncStorage.setItem(key, value);
+    } catch {
+      /* ignore quota / privacy errors */
+    }
+  },
+};
 
 export type CartItem = {
   key: string;
@@ -59,7 +87,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const key = CART_KEY(user?.id);
-    AsyncStorage.getItem(key).then((raw) => {
+    storage.getItem(key).then((raw) => {
       if (!raw) return;
       try {
         const saved = JSON.parse(raw) as { items: CartItem[]; couponCode: string | null };
@@ -71,7 +99,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const key = CART_KEY(user?.id);
-    AsyncStorage.setItem(key, JSON.stringify({ items, couponCode }));
+    storage.setItem(key, JSON.stringify({ items, couponCode }));
   }, [items, couponCode, user?.id]);
 
   const makeKey = (p: Product, v: ProductVariant | null, a: ProductAddon[]) =>

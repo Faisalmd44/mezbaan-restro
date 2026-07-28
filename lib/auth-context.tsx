@@ -45,11 +45,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Hard timeout — if nothing settles in 5 s, force loading=false
+    // Safety net: no matter what happens (network unreachable, getSession
+    // never resolves, onAuthStateChange never fires, loadProfile hangs), the
+    // app must become interactive. 3.5s is short enough to feel responsive
+    // and long enough to let a normal getSession round-trip complete.
     const hardTimeout = setTimeout(() => {
       console.warn('[Auth] hard timeout hit — proceeding without session');
       settle();
-    }, 5000);
+    }, 3500);
 
     if (!isSupabaseConfigured) {
       clearTimeout(hardTimeout);
@@ -57,40 +60,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // onAuthStateChange fires synchronously from the stored token on Android
-    // before getSession() resolves, so treat it as the primary source of truth.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      if (newSession?.user) {
-        loadProfile(newSession.user.id).finally(settle);
-      } else {
-        settle();
-      }
-      if (newSession !== undefined) {
-        clearTimeout(hardTimeout);
-      }
-    });
+    let settled = false;
+    const settleOnce = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(hardTimeout);
+      settle();
+    };
 
-    // getSession() is the fallback for environments where onAuthStateChange
-    // doesn't fire synchronously (e.g. first cold start with no stored token).
-    supabase.auth.getSession()
+    // loadProfile must never be able to keep loading=true forever.
+    const safeLoadProfile = (uid: string) =>
+      Promise.race([
+        loadProfile(uid).catch(() => {}),
+        new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+      ]).finally(settleOnce);
+
+    let subscription: { unsubscribe: () => void } | undefined;
+    try {
+      ({ data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+        setSession(newSession);
+        if (newSession?.user) {
+          safeLoadProfile(newSession.user.id);
+        } else {
+          settleOnce();
+        }
+      }));
+    } catch {
+      // onAuthStateChange threw synchronously — rely on getSession fallback.
+    }
+
+    supabase.auth
+      .getSession()
       .then(({ data }) => {
-        if (settledRef.current) return;
+        if (settled) return;
         setSession(data.session);
         if (data.session?.user) {
-          loadProfile(data.session.user.id).finally(settle);
+          safeLoadProfile(data.session.user.id);
         } else {
-          settle();
+          settleOnce();
         }
-        clearTimeout(hardTimeout);
       })
-      .catch(() => {
-        clearTimeout(hardTimeout);
-        settle();
-      });
+      .catch(() => settleOnce());
 
     return () => {
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
       clearTimeout(hardTimeout);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
