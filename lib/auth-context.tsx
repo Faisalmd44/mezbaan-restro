@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isSupabaseConfigured) return;
     try {
       const { data } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('id', uid)
         .maybeSingle();
@@ -45,10 +45,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Safety net: no matter what happens (network unreachable, getSession
-    // never resolves, onAuthStateChange never fires, loadProfile hangs), the
-    // app must become interactive. 3.5s is short enough to feel responsive
-    // and long enough to let a normal getSession round-trip complete.
     const hardTimeout = setTimeout(() => {
       console.warn('[Auth] hard timeout hit — proceeding without session');
       settle();
@@ -68,7 +64,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       settle();
     };
 
-    // loadProfile must never be able to keep loading=true forever.
     const safeLoadProfile = (uid: string) =>
       Promise.race([
         loadProfile(uid).catch(() => {}),
