@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Mezbaan Restro",
+    "name": "Mezbaan",
     "slug": "mezbaan-restro",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,7 +16,8 @@
         "foregroundImage": "assets/images/icon.png",
         "backgroundColor": "#0A0A0B"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.mezbaan.restro"
     },
     "web": {
       "bundler": "metro",
@@ -31,7 +32,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "assets/images/splash.png",
+          "image": "assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#0A0A0B"

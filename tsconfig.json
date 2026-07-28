@@ -1,24 +1,6 @@
 {
   "extends": "expo/tsconfig.base",
-  "compilerOptions": {
-    "strict": true,
-    "paths": {
-      "@/*": ["./*"]
-    }
-  },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts",
-    "nativewind-env.dts"
-  ],
-  "exclude": [
-    "node_modules",
-    "supabase/functions",
-    "frontend",
-    "backend",
-    "tests",
-    "test_reports"
-  ]
+  "compilerOptions": { "strict": true, "paths": { "@/*": ["./*"] } },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules", "supabase/functions", "frontend", "backend", "tests"]
 }
