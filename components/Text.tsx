@@ -14,6 +14,7 @@ type Props = TextProps & {
 export function Text({ variant = 'body', weight = 'regular', color = 'primary', style, ...rest }: Props) {
   return (
     <RNText
+     allowFontScaling={false}
       style={[
         { fontFamily: fontFamily(weight), color: colorFor(color) },
         variantStyles[variant],

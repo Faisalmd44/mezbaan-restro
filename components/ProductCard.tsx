@@ -8,11 +8,19 @@ import { Text } from './Text';
 import { formatCurrency } from '@/lib/utils';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { Minus } from 'lucide-react-native';
+import { useCart } from '@/lib/cart-context';
 
 type Props = { product: Product; onPress: (id: string) => void; onAdd?: (product: Product) => void; isFavorite?: boolean };
 
 export function ProductCard({ product, onPress, onAdd, isFavorite }: Props) {
   const [fav, setFav] = useState(isFavorite ?? false);
+
+  const { items, addItem, updateQty } = useCart();
+
+  const cartItem = items.find(
+     (i) => i.product.id === product.id && !i.variant && i.addons.length === 0
+     );
 
   const toggleFav = async () => {
     const prev = fav;
@@ -53,11 +61,39 @@ export function ProductCard({ product, onPress, onAdd, isFavorite }: Props) {
         <Text variant="caption" color="secondary" numberOfLines={2} style={styles.desc}>{product.description}</Text>
         <View style={styles.footer}>
           <Text variant="price" color="gold">{formatCurrency(Number(product.price))}</Text>
-          {onAdd && (
-            <Pressable onPress={() => onAdd(product)} disabled={!product.is_available} style={({ pressed }) => [styles.addBtn, pressed && styles.pressed, !product.is_available && styles.disabled]}>
-              <Plus size={16} color={COLORS.onGold} />
-            </Pressable>
-          )}
+          {cartItem ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Pressable
+           style={styles.addBtn}
+          onPress={() => updateQty(cartItem.key, cartItem.quantity - 1)}
+          >
+           <Minus size={16} color={COLORS.onGold} />
+         </Pressable>
+
+         <Text weight="semiBold">{cartItem.quantity}</Text>
+
+        <Pressable
+         style={styles.addBtn}
+         onPress={() => updateQty(cartItem.key, cartItem.quantity + 1)}
+        >
+      <Plus size={16} color={COLORS.onGold} />
+    </Pressable>
+  </View>
+) : (
+  onAdd && (
+    <Pressable
+      onPress={() => onAdd(product)}
+      disabled={!product.is_available}
+      style={({ pressed }) => [
+        styles.addBtn,
+        pressed && styles.pressed,
+        !product.is_available && styles.disabled,
+      ]}
+    >
+      <Plus size={16} color={COLORS.onGold} />
+    </Pressable>
+  )
+)}
         </View>
       </View>
     </Pressable>
