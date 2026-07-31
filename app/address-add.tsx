@@ -53,9 +53,13 @@ export default function AddAddressScreen() {
       haptic.success();
       setSelectedAddress(addr);
       router.back();
-    } catch (e) {
-      setError('Failed to save address. Please try again.');
-      console.warn('add addr', e);
+    } catch (e: any) {
+    console.log("ADDRESS ERROR:", e);
+    console.log("ADDRESS ERROR JSON:", JSON.stringify(e, null, 2));
+
+     setError(e?.message || "Failed to save address.");
+
+     console.warn("add addr", e);
     } finally {
       setSaving(false);
     }

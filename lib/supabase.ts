@@ -57,6 +57,7 @@ const webAdapter = {
 // the client is created synchronously so the app never blocks on import.
 const storageAdapter = Platform.OS === 'web' ? webAdapter : memoryAdapter;
 
+console.log("SUPABASE URL:", supabaseUrl);
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'placeholder-anon-key',

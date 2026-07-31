@@ -17,9 +17,11 @@ async function request(path: string, opts: RequestInit = {}, withAuth = true, ad
   if (admin) headers["X-Admin-Passcode"] = ADMIN_PASSCODE;
   const res = await fetch(`${BASE}/api${path}`, { ...opts, headers });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Request failed: ${res.status}`);
-  }
+  const text = await res.text();
+  console.log("ORDER API STATUS:", res.status);
+  console.log("ORDER API RESPONSE:", text);
+  throw new Error(text || `Request failed: ${res.status}`);
+}
   return res.json();
 }
 

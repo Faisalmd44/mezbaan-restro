@@ -30,19 +30,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-  const loadProfile = useCallback(async (uid: string) => {
-    if (!isSupabaseConfigured) return;
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', uid)
-        .maybeSingle();
-      setProfile(data as Profile | null);
-    } catch {
-      // profile load failure is non-fatal
+const loadProfile = useCallback(async (uid: string) => {
+  if (!isSupabaseConfigured) return;
+
+  try {
+    let { data } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', uid)
+      .maybeSingle();
+
+    if (!data) {
+      const { data: auth } = await supabase.auth.getUser();
+
+      if (auth.user) {
+        const newUser = {
+          id: auth.user.id,
+          name: auth.user.user_metadata?.full_name ?? "",
+          email: auth.user.email ?? "",
+          phone: auth.user.user_metadata?.phone ?? "",
+        };
+
+        await supabase.from("users").insert(newUser);
+
+        data = newUser;
+      }
     }
-  }, []);
+
+    setProfile(data as any);
+  } catch (e) {
+    console.log("LOAD PROFILE ERROR:", e);
+  }
+}, []);
 
   useEffect(() => {
     // Safety net: no matter what happens (network unreachable, getSession

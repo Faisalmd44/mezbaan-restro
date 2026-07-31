@@ -102,16 +102,26 @@ export default function OrdersScreen() {
               </View>
             </View>
 
-            <View style={styles.orderItems}>
-              {order.items.slice(0, 3).map((i, iidx) => (
-                <Text key={iidx} variant="caption" color="secondary" numberOfLines={1}>
-                  {i.quantity}× {i.name}{i.variant_name ? ` (${i.variant_name})` : ''}
-                </Text>
-              ))}
-              {order.items.length > 3 && (
-                <Text variant="caption" color="tertiary">+{order.items.length - 3} more items</Text>
-              )}
-            </View>
+           <View style={styles.orderItems}>
+  {Array.isArray(order.items) &&
+    order.items.slice(0, 3).map((i: any, iidx: number) => (
+      <Text
+        key={iidx}
+        variant="caption"
+        color="secondary"
+        numberOfLines={1}
+      >
+        {i.quantity}× {i.name}
+        {i.variant_name ? ` (${i.variant_name})` : ""}
+      </Text>
+    ))}
+
+  {Array.isArray(order.items) && order.items.length > 3 && (
+    <Text variant="caption" color="tertiary">
+      +{order.items.length - 3} more items
+    </Text>
+  )}
+</View>
 
             <View style={styles.orderFooter}>
               <Text variant="price" color="gold">{formatCurrency(Number(order.total))}</Text>

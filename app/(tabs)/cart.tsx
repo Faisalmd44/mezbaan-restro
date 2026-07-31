@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, Pressable, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Trash2, Tag, X, ShoppingBag, ChevronRight } from 'lucide-react-native';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/lib/theme';
 import { Text } from '@/components/Text';
@@ -17,6 +18,7 @@ import type { Coupon } from '@/lib/types';
 import { formatCurrency, haptic } from '@/lib/utils';
 
 export default function CartScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   const { user } = useAuth();
   const { items, count, subtotal, discount, deliveryFee, tax, total, coupon, applyCoupon, removeCoupon, updateQty, removeItem, clear, freeDeliveryThreshold } = useCart();
@@ -143,7 +145,14 @@ export default function CartScreen() {
         </View>
         <View style={{ height: 100 }} />
       </ScrollView>
-      <View style={styles.ctaBar}>
+      <View
+  style={[
+    styles.ctaBar,
+    {
+      paddingBottom: tabBarHeight + SPACING.md,
+    },
+  ]}
+>
         <View><Text variant="caption" color="secondary">{count} item{count > 1 ? 's' : ''}</Text><Text variant="h3" weight="bold" color="gold">{formatCurrency(total)}</Text></View>
         <Button label="Checkout" onPress={goToCheckout} size="lg" style={styles.ctaBtn} />
       </View>

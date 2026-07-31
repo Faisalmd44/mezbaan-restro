@@ -28,12 +28,26 @@ export default function ProfileScreen() {
 
   useEffect(() => { loadWallet(); }, [loadWallet]);
 
-  const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => { haptic.light(); signOut(); } },
-    ]);
-  };
+const handleLogout = () => {
+  console.log("Logout pressed");
+
+  Alert.alert(
+    "Sign Out",
+    "Are you sure you want to sign out?",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: async () => {
+          console.log("Confirmed logout");
+          haptic.light();
+          await signOut();
+        },
+      },
+    ]
+  );
+};
 
   const rows: { icon: React.ReactNode; label: string; onPress: () => void; value?: string }[] = [
     { icon: <Wallet size={20} color={COLORS.gold} />, label: 'Wallet', onPress: () => router.push('/wallet'), value: wallet ? formatCurrency(Number(wallet.balance)) : '₹0' },
@@ -92,11 +106,11 @@ export default function ProfileScreen() {
           <Text variant="label" color="tertiary" weight="semiBold" style={styles.contactTitle}>RESTAURANT</Text>
           <View style={styles.contactRow}>
             <Phone size={16} color={COLORS.onSurfaceSecondary} />
-            <Text variant="caption" color="secondary">+91 99999 99999</Text>
+            <Text variant="caption" color="secondary">+91 859 524 4548</Text>
           </View>
           <View style={styles.contactRow}>
             <Mail size={16} color={COLORS.onSurfaceSecondary} />
-            <Text variant="caption" color="secondary">support@mezbaanrestro.com</Text>
+            <Text variant="caption" color="secondary">contact@mezbaaan.in</Text>
           </View>
         </View>
 

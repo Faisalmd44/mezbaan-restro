@@ -226,11 +226,23 @@ export async function addAddress(input: {
   lng?: number;
   is_default?: boolean;
 }): Promise<Address> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error("Please login again.");
+  }
+
   const { data, error } = await supabase
-    .from('addresses')
-    .insert(input)
+    .from("addresses")
+    .insert({
+      ...input,
+      user_id: user.id,
+    })
     .select()
     .single();
+
   if (error) throw error;
   return data as Address;
 }
@@ -294,28 +306,49 @@ export async function placeOrder(input: {
   zone_name?: string | null;
   distance_km?: number | null;
 }): Promise<Order> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: userData } = await supabase
+    .from("users")
+    .select("name, phone")
+    .eq("id", user?.id)
+    .single();
+
   const orderNo = `MZB${Date.now().toString().slice(-10)}`;
+
   const payload = {
     order_no: orderNo,
-    status: 'received' as OrderStatus,
-    items: input.items,
-    subtotal: input.subtotal,
-    discount: input.discount,
-    delivery_fee: input.delivery_fee,
-    tax: input.tax,
+    user_id: user?.id ?? null,
+    user_name: userData?.name ?? "",
+    user_phone: userData?.phone ?? "",
+    address: input.delivery_address.full_address,
     total: input.total,
-    coupon_code: input.coupon_code,
+    status: "received",
     payment_method: input.payment_method,
-    payment_status: 'pending' as const,
-    delivery_address: input.delivery_address,
+    payment_status: "pending",
     notes: input.notes ?? null,
-    zone_id: input.zone_id ?? null,
-    zone_name: input.zone_name ?? null,
-    distance_km: input.distance_km ?? null,
-    status_history: [{ status: 'received' as OrderStatus, at: new Date().toISOString() }],
+    coupon_code: input.coupon_code,
+    status_history: [
+      {
+        status: "received",
+        at: new Date().toISOString(),
+      },
+    ],
   };
-  const { data, error } = await supabase.from('orders').insert(payload).select().single();
+
+  const { data, error } = await supabase
+    .from("orders")
+    .insert(payload)
+    .select()
+    .single();
+
+  console.log("ORDER ERROR =", error);
+  console.log("ORDER DATA =", data);
+
   if (error) throw error;
+
   const order = data as Order;
 
   if (input.items.length) {
@@ -329,14 +362,18 @@ export async function placeOrder(input: {
       variant_name: i.variant_name,
       addons: i.addon_names.map((name) => ({ name, price: 0 })),
     }));
-    await supabase.from('order_items').insert(rows);
+
+    await supabase.from("order_items").insert(rows);
   }
 
-  await supabase.from('notifications').insert({
-    type: 'order',
-    title: 'Order Placed',
+  await supabase.from("notifications").insert({
+    type: "order",
+    title: "Order Placed",
     body: `Your order ${orderNo} has been received.`,
-    data: { order_id: order.id, order_no: orderNo },
+    data: {
+      order_id: order.id,
+      order_no: orderNo,
+    },
   });
 
   return order;
@@ -353,13 +390,62 @@ export async function fetchOrders(): Promise<Order[]> {
 }
 
 export async function fetchOrderById(id: string): Promise<Order | null> {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*')
-    .eq('id', id)
+  const { data: order, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("id", id)
     .maybeSingle();
+
   if (error) throw error;
-  return data as Order | null;
+  if (!order) return null;
+
+  const { data: items } = await supabase
+    .from("order_items")
+    .select("*")
+    .eq("order_id", id);
+
+  return {
+    ...(order as any),
+
+    items: (items ?? []).map((i: any) => ({
+      product_id: i.item_id,
+      name: i.name,
+      image_url: null,
+      base_price: Number(i.price),
+      unit_price: Number(i.price),
+      quantity: i.quantity,
+      variant_id: null,
+      variant_name: i.variant,
+      addon_ids: [],
+      addon_names: [],
+      addons_total: 0,
+      line_total: Number(i.price) * Number(i.quantity),
+    })),
+    subtotal: Number((order as any).total),
+    discount: 0,
+    delivery_fee: 0,
+    tax: 0,
+
+    delivery_address: {
+      id: "",
+      user_id: (order as any).user_id ?? "",
+      label: "home",
+      full_address: (order as any).address ?? "",
+      landmark: null,
+      lat: null,
+      lng: null,
+      is_default: false,
+      created_at: "",
+    },
+
+    notes: (order as any).notes,
+    zone_id: null,
+    zone_name: null,
+    distance_km: null,
+
+    created_at: (order as any).created_at,
+    updated_at: (order as any).created_at,
+  } as Order;
 }
 
 export async function cancelOrder(id: string): Promise<void> {
@@ -428,7 +514,7 @@ export async function createRazorpayOrder(orderId: string, amount: number): Prom
   const token = session.session?.access_token;
   if (!token) throw new Error('Not authenticated');
 
-  const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/razorpay-create-order`;
+  const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mezbaan-api/payments/razorpay/create-order`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -457,7 +543,7 @@ export async function verifyRazorpayPayment(params: {
   const token = session.session?.access_token;
   if (!token) throw new Error('Not authenticated');
 
-  const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/razorpay-verify-payment`;
+ const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mezbaan-api/payments/razorpay/verify`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {

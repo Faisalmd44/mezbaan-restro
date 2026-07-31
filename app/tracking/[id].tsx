@@ -138,13 +138,22 @@ export default function TrackingScreen() {
           <Text variant="h3" weight="semiBold" style={styles.sectionTitle}>Delivery Address</Text>
           <View style={styles.addrCard}>
             <MapPin size={18} color={COLORS.gold} />
-            <View style={styles.addrBody}>
-              <Text variant="caption" color="gold" weight="semiBold" style={styles.addrTag}>{order.delivery_address.label.toUpperCase()}</Text>
-              <Text weight="medium">{order.delivery_address.full_address}</Text>
-              {order.delivery_address.landmark && <Text variant="caption" color="secondary">Near {order.delivery_address.landmark}</Text>}
-            </View>
-          </View>
-        </View>
+           <View style={styles.addrBody}>
+          <Text
+            variant="caption"
+            color="gold"
+            weight="semiBold"
+          style={styles.addrTag}
+        >
+           DELIVERY
+      </Text>
+
+        <Text weight="medium">
+  {order.address}
+</Text>
+</View>   {/* addrBody */}
+</View>   {/* addrCard */}
+</View>   {/* section */}
 
         {/* Order items */}
         <View style={styles.section}>

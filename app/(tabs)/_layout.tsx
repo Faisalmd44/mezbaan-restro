@@ -26,7 +26,16 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  tabBar: { position: 'absolute', backgroundColor: COLORS.glass, borderTopColor: COLORS.border, borderTopWidth: StyleSheet.hairlineWidth, height: 64, paddingHorizontal: 8, paddingBottom: 8, paddingTop: 8 },
+  tabBar: {
+  position: "absolute",
+  backgroundColor: COLORS.glass,
+  borderTopColor: COLORS.border,
+  borderTopWidth: StyleSheet.hairlineWidth,
+  height: 64,
+  paddingTop: 6,
+  paddingBottom: 8,
+},
+
   tabBarLabel: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, marginTop: 2 },
   tabBarItem: { gap: 2 },
   tabBarIcon: { marginBottom: 0 },
