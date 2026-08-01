@@ -110,7 +110,9 @@ export default function Checkout() {
       const result = await method.pay({ amount: total, customerName: name, customerPhone: phone });
       if (!result.success) throw new Error(result.message || "Payment failed");
 
-      const res = await api.placeOrder({
+      console.log("CHECKOUT CART:", JSON.stringify(cart, null, 2));
+ 
+     const res = await api.placeOrder({
         items: cart,
         address, phone, name,
         payment_method: payment,

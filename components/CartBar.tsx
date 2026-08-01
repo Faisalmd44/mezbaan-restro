@@ -20,8 +20,8 @@ export function CartBar({ count, total, onPress }: Props) {
             </View>
           </View>
           <View>
-            <Text variant="caption" color="gold" style={styles.label}>{count} item{count > 1 ? 's' : ''} • {formatCurrency(total)}</Text>
-            <Text weight="semiBold" color="gold" style={styles.cta}> View Cart → </Text>
+            <Text variant="caption" color="black" style={styles.label}>{count} item{count > 1 ? 's' : ''} • {formatCurrency(total)}</Text>
+            <Text weight="semiBold" color="black" style={styles.cta}> View Cart → </Text>
           </View>
         </View>
       </LinearGradient>
