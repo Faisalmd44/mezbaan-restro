@@ -176,5 +176,11 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   ctaText: { color: "#fff", fontWeight: "800", fontSize: 16 },
-  terms: { textAlign: "center", color: COLORS.textMuted, fontFamily:PlusJakartaSans_700Bold, fontSize: 12, marginTop: SPACING.md },
+ terms: {
+  textAlign: "center",
+  color: COLORS.textMuted,
+  fontWeight: "700",
+  fontSize: 12,
+  marginTop: SPACING.md,
+},
 });

@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BASE =
+`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mezbaan-api`;
 export const ADMIN_PASSCODE = "MEZBAAN2026";
 
 async function authHeader(): Promise<Record<string, string>> {
@@ -15,7 +16,7 @@ async function request(path: string, opts: RequestInit = {}, withAuth = true, ad
   };
   if (withAuth) Object.assign(headers, await authHeader());
   if (admin) headers["X-Admin-Passcode"] = ADMIN_PASSCODE;
-  const res = await fetch(`${BASE}/api${path}`, { ...opts, headers });
+ const res = await fetch(`${BASE}/${path}`, { ...opts, headers });
   if (!res.ok) {
   const text = await res.text();
   console.log("ORDER API STATUS:", res.status);

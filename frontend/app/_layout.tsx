@@ -12,12 +12,6 @@ import {
   PlusJakartaSans_800ExtraBold,
 } from "@expo-google-fonts/plus-jakarta-sans";
 
-const [fontsLoaded] = useFonts({
-  PlusJakartaSans_400Regular,
-  PlusJakartaSans_600SemiBold,
-  PlusJakartaSans_700Bold,
-  PlusJakartaSans_800ExtraBold,
-});
 import {
   AppContext,
   AppUser,
@@ -32,7 +26,12 @@ import { api } from "@/src/api";
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useIconFonts();
+  const [loaded, error] = useFonts({
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+});
   const [bootDone, setBootDone] = useState(false);
   const [user, setUser] = useState<AppUser | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);

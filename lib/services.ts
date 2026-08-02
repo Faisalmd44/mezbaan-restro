@@ -352,18 +352,22 @@ export async function placeOrder(input: {
   const order = data as Order;
 
   if (input.items.length) {
-    const rows = input.items.map((i) => ({
-      order_id: order.id,
-      product_id: i.product_id,
-      name: i.name,
-      image_url: i.image_url,
-      price: i.unit_price,
-      quantity: i.quantity,
-      variant_name: i.variant_name,
-      addons: i.addon_names.map((name) => ({ name, price: 0 })),
-    }));
+   
+  const rows = input.items.map((i) => ({
+  order_id: order.id,
+  item_id: i.product_id,
+  name: i.name,
+  price: i.unit_price,
+  quantity: i.quantity,
+  variant: i.variant_name ?? null,
+}));
 
-    await supabase.from("order_items").insert(rows);
+    const { error: itemError } =
+  await supabase.from("order_items").insert(rows);
+
+console.log("ORDER_ITEMS ERROR =", itemError);
+
+if (itemError) throw itemError;
   }
 
   await supabase.from("notifications").insert({
