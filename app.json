@@ -18,6 +18,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.faisalmd44.mezbaanrestro"
+     "jsEngine": "hermes"
     },
     "web": {
       "bundler": "metro",
@@ -33,7 +34,7 @@
         "expo-splash-screen",
         {
           "image": "assets/images/splash.png",
-          "imageWidth": 200,
+          "imageWidth": 250,
           "resizeMode": "contain",
           "backgroundColor": "#0A0A0B"
         }
