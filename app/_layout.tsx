@@ -12,17 +12,12 @@ import {
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider } from '@/lib/auth-context';
 import { CartProvider } from '@/lib/cart-context';
-import { loadToken, useApp } from '@/src/store';
-import { api } from '@/src/api';
 
 // Prevent native splash from auto-hiding
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   useFrameworkReady();
-
-  // Access user state setter for auto-login
-  const { setUser } = useApp ? useApp() : { setUser: null };
 
   const [fontsLoaded, fontError] = useFonts({
     'PlusJakartaSans-Regular': PlusJakartaSans_400Regular,
@@ -42,31 +37,14 @@ export default function RootLayout() {
     }
   }, []);
 
-  // 1. Auto-Login / Session Restore on App Launch
-  useEffect(() => {
-    (async () => {
-      try {
-        const token = await loadToken();
-        if (token) {
-          const userData = await api.me();
-          if (userData && setUser) {
-            setUser(userData);
-          }
-        }
-      } catch (e) {
-        console.log('[Auto-Login] Session restore failed:', e);
-      }
-    })();
-  }, [setUser]);
-
-  // 2. Hide splash as soon as fonts resolve
+  // Hide splash as soon as fonts resolve
   useEffect(() => {
     if (fontsLoaded || fontError) {
       hideSplash();
     }
   }, [fontsLoaded, fontError, hideSplash]);
 
-  // 3. Hard fallback timer for splash
+  // Hard fallback timer for splash
   useEffect(() => {
     const t = setTimeout(hideSplash, 2500);
     return () => clearTimeout(t);
