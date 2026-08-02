@@ -12,14 +12,17 @@ import {
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider } from '@/lib/auth-context';
 import { CartProvider } from '@/lib/cart-context';
+import { loadToken, useApp } from '@/src/store';
+import { api } from '@/src/api';
 
-// Prevent the native splash from auto-hiding so we can hide it explicitly
-// once fonts + first paint are ready. The .catch() guards against the case
-// where the splash is already prevented (e.g. Fast Refresh).
+// Prevent native splash from auto-hiding
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   useFrameworkReady();
+
+  // Access user state setter for auto-login
+  const { setUser } = useApp ? useApp() : { setUser: null };
 
   const [fontsLoaded, fontError] = useFonts({
     'PlusJakartaSans-Regular': PlusJakartaSans_400Regular,
@@ -35,29 +38,40 @@ export default function RootLayout() {
     try {
       SplashScreen.hideAsync().catch(() => {});
     } catch {
-      /* already hidden or not shown */
+      /* already hidden */
     }
   }, []);
 
-  // Hide as soon as fonts resolve (success OR error). If font loading never
-  // settles at all, the fallback timer below hides it anyway — the splash
-  // must never hang the app.
+  // 1. Auto-Login / Session Restore on App Launch
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await loadToken();
+        if (token) {
+          const userData = await api.me();
+          if (userData && setUser) {
+            setUser(userData);
+          }
+        }
+      } catch (e) {
+        console.log('[Auto-Login] Session restore failed:', e);
+      }
+    })();
+  }, [setUser]);
+
+  // 2. Hide splash as soon as fonts resolve
   useEffect(() => {
     if (fontsLoaded || fontError) {
       hideSplash();
     }
   }, [fontsLoaded, fontError, hideSplash]);
 
-  // Hard fallback: if the font hook never resolves (e.g. a font asset fails
-  // to download), force the splash to hide after 2.5s regardless.
+  // 3. Hard fallback timer for splash
   useEffect(() => {
     const t = setTimeout(hideSplash, 2500);
     return () => clearTimeout(t);
   }, [hideSplash]);
 
-  // Render the navigator unconditionally so Expo Router can mount routes.
-  // The initial route "/" renders app/index.tsx which shows a loading screen
-  // and redirects once auth state is known.
   return (
     <AuthProvider>
       <CartProvider>
@@ -81,3 +95,4 @@ export default function RootLayout() {
     </AuthProvider>
   );
 }
+

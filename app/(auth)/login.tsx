@@ -260,6 +260,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceSecondary,
     borderRadius: RADIUS.pill,
     paddingVertical: SPACING.md + 2,
+    paddingHorizontal: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -271,7 +272,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  googleG: { color: '#4285F4', fontSize: 14 },
-  googleText: { color: COLORS.onSurface },
-  signupRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: SPACING.sm },
+  googleG: { color: '#4285F4', fontSize: 14, lineHeight: 18, textAlign: 'center' },
+  googleText: { color: COLORS.onSurface, flexShrink: 1, textAlign: 'center' },
+  signupRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: SPACING.sm, flexWrap: 'wrap' },
 });
+
