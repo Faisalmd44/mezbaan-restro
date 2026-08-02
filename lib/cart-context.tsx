@@ -1,14 +1,12 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
+import * as Application from 'expo-application';
 import type { CartLineSnapshot, Product, ProductVariant, ProductAddon, Coupon, Address, PaymentMethod } from './types';
 import { useAuth } from './auth-context';
+import { supabase } from './supabase';
 
 const CART_KEY = (uid: string | undefined) => `mezbaan_cart_${uid ?? 'guest'}`;
 
-// Platform-safe storage. On web we use localStorage; on native we lazily
-// import AsyncStorage. Both paths are wrapped in try/catch so a storage
-// failure (private mode, quota, missing native module) can never crash the
-// app or leave the splash hanging.
 const storage = {
   getItem: async (key: string): Promise<string | null> => {
     try {
@@ -31,6 +29,20 @@ const storage = {
       /* ignore quota / privacy errors */
     }
   },
+};
+
+// Unique Hardware Device Identifier Fetcher
+export const getDeviceId = async (): Promise<string> => {
+  try {
+    if (Platform.OS === 'android') {
+      return Application.getAndroidId() || 'unknown_android_device';
+    } else if (Platform.OS === 'ios') {
+      return (await Application.getIosIdForVendorAsync()) || 'unknown_ios_device';
+    }
+  } catch (e) {
+    console.log('Error fetching device ID:', e);
+  }
+  return 'web_or_unknown_device';
 };
 
 export type CartItem = {
@@ -60,7 +72,8 @@ type CartContextValue = {
   updateQty: (key: string, qty: number) => void;
   removeItem: (key: string) => void;
   clear: () => void;
-  applyCoupon: (coupon: Coupon) => void;
+  applyCoupon: (coupon: Coupon) => Promise<boolean>;
+  applyWelcomeCoupon: () => Promise<boolean>;
   removeCoupon: () => void;
   setSelectedAddress: (a: Address | null) => void;
   setPaymentMethod: (m: PaymentMethod) => void;
@@ -119,10 +132,78 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removeItem = useCallback((key: string) => { setItems((prev) => prev.filter((i) => i.key !== key)); }, []);
-
   const clear = useCallback(() => { setItems([]); setCoupon(null); setCouponCode(null); setOrderNotes(''); }, []);
 
-  const applyCoupon = useCallback((c: Coupon) => { setCoupon(c); setCouponCode(c.code); }, []);
+  // Standard Coupon Application Router
+  const applyCoupon = useCallback(async (c: Coupon) => {
+    if (c.code.toUpperCase() === 'WELCOME15') {
+      return await applyWelcomeCoupon();
+    }
+    setCoupon(c);
+    setCouponCode(c.code);
+    return true;
+  }, [user?.id]);
+
+  // Anti-Abuse WELCOME15 Coupon (1 per physical Device + Account lock)
+  const applyWelcomeCoupon = useCallback(async (): Promise<boolean> => {
+    if (!user) {
+      Alert.alert('Login Required', 'Please log in to claim WELCOME15 coupon.');
+      return false;
+    }
+
+    try {
+      const deviceId = await getDeviceId();
+
+      // 1. Check if physical DEVICE has ever used WELCOME15
+      const { data: deviceOrders } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('device_id', deviceId)
+        .eq('coupon_code', 'WELCOME15')
+        .limit(1);
+
+      if (deviceOrders && deviceOrders.length > 0) {
+        Alert.alert(
+          'Offer Already Claimed 🛑',
+          'WELCOME15 has already been used on this phone/device! New accounts on the same device are not eligible.'
+        );
+        return false;
+      }
+
+      // 2. Check if USER ACCOUNT has ever used WELCOME15
+      const { data: userOrders } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('coupon_code', 'WELCOME15')
+        .limit(1);
+
+      if (userOrders && userOrders.length > 0) {
+        Alert.alert('Coupon Already Used', 'You have already used WELCOME15 on this account.');
+        return false;
+      }
+
+      const welcomeCouponObj: Coupon = {
+        id: 'welcome15',
+        code: 'WELCOME15',
+        discount_type: 'percent',
+        discount_value: 15,
+        min_order: 0,
+        max_discount: 100,
+        is_active: true,
+      };
+
+      setCoupon(welcomeCouponObj);
+      setCouponCode('WELCOME15');
+      Alert.alert('Success 🎉', 'WELCOME15 Applied! 15% discount added to your cart.');
+      return true;
+
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to validate coupon.');
+      return false;
+    }
+  }, [user]);
+
   const removeCoupon = useCallback(() => { setCoupon(null); setCouponCode(null); }, []);
 
   const addonsTotal = items.reduce((sum, i) => sum + i.addons.reduce((s, a) => s + Number(a.price), 0) * i.quantity, 0);
@@ -145,7 +226,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const value: CartContextValue = {
     items, count, subtotal: Math.round(subtotal * 100) / 100, addonsTotal: Math.round(addonsTotal * 100) / 100,
     coupon, couponCode, discount, deliveryFee, tax, total, selectedAddress, paymentMethod, orderNotes,
-    addItem, updateQty, removeItem, clear, applyCoupon, removeCoupon, setSelectedAddress, setPaymentMethod, setOrderNotes,
+    addItem, updateQty, removeItem, clear, applyCoupon, applyWelcomeCoupon, removeCoupon, setSelectedAddress, setPaymentMethod, setOrderNotes,
     freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD, taxRate: TAX_RATE, deliveryFeeBase: DELIVERY_FEE_BASE,
   };
 
@@ -172,3 +253,4 @@ export function toSnapshots(items: CartItem[]): CartLineSnapshot[] {
     };
   });
 }
+

@@ -12,16 +12,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, MapPin, CreditCard, Wallet as WalletIcon, Banknote, Smartphone, Plus, CheckCircle2 } from 'lucide-react-native';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SHADOWS } from '@/lib/theme';
+import { COLORS, SPACING, RADIUS, SHADOWS } from '@/lib/theme';
 import { Text } from '@/components/Text';
 import { Button } from '@/components/Button';
 import { PriceRow } from '@/components/PriceRow';
 import { RazorpayCheckout, RazorpayCheckoutParams, RazorpayResult } from '@/components/RazorpayCheckout';
-import { useCart, toSnapshots } from '@/lib/cart-context';
+import { useCart, toSnapshots, getDeviceId } from '@/lib/cart-context';
 import { useAuth } from '@/lib/auth-context';
 import {
-  fetchAddresses, placeOrder, fetchDeliveryZones, fetchWallet,
-  createRazorpayOrder, verifyRazorpayPayment, markOrderPaid,
+  fetchAddresses, placeOrder, fetchDeliveryZones, fetchWallet, createRazorpayOrder, verifyRazorpayPayment, markOrderPaid,
 } from '@/lib/services';
 import type { Address, PaymentMethod, DeliveryZone, Wallet } from '@/lib/types';
 import { formatCurrency, haptic, haversineKm } from '@/lib/utils';
@@ -32,10 +31,8 @@ export default function CheckoutScreen() {
   const { user, profile } = useAuth();
   const {
     items, count, subtotal, discount, deliveryFee, tax, total,
-    couponCode, selectedAddress, setSelectedAddress,
-    paymentMethod, setPaymentMethod, orderNotes, clear,
+    couponCode, selectedAddress, setSelectedAddress, paymentMethod, setPaymentMethod, orderNotes, clear,
   } = useCart();
-
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -56,7 +53,6 @@ export default function CheckoutScreen() {
       setAddresses(addr);
       setZones(z);
       setWallet(w);
-      // auto-select default address
       const def = addr.find((a) => a.is_default) ?? addr[0];
       if (def && !selectedAddress) setSelectedAddress(def);
     } catch (e) {
@@ -97,6 +93,9 @@ export default function CheckoutScreen() {
 
     setPlacing(true);
     try {
+      // Get physical device ID to enforce per-device coupon rules
+      const deviceId = await getDeviceId();
+
       // Step 1: Create the order in Supabase (payment_status = 'pending')
       const order = await placeOrder({
         items: toSnapshots(items),
@@ -106,6 +105,7 @@ export default function CheckoutScreen() {
         tax,
         total,
         coupon_code: couponCode,
+        device_id: deviceId, // 👈 Per-Device Hardware Lock Parameter
         payment_method: paymentMethod,
         delivery_address: selectedAddress,
         notes: orderNotes,
@@ -115,7 +115,6 @@ export default function CheckoutScreen() {
       });
 
       if (paymentMethod === 'cod') {
-        // COD: order is placed with payment_status = 'pending' (pay on delivery)
         haptic.success();
         clear();
         router.replace(`/tracking/${order.id}`);
@@ -123,7 +122,6 @@ export default function CheckoutScreen() {
       }
 
       if (paymentMethod === 'wallet') {
-        // Wallet: deduct balance immediately and mark as paid
         const { error: walletError } = await supabase.rpc('deduct_wallet', {
           p_amount: total,
           p_reference: order.id,
@@ -142,7 +140,6 @@ export default function CheckoutScreen() {
       }
 
       if (paymentMethod === 'upi') {
-        // UPI deep link: open UPI app with payment details
         const upiId = 'mohd.4548@ptaxis';
         const upiUrl = `upi://pay?pa=${upiId}&pn=Mezbaan%20Restro&am=${total.toFixed(2)}&cu=INR&tn=Order%20${order.order_no}`;
         const canOpen = await Linking.canOpenURL(upiUrl);
@@ -152,7 +149,6 @@ export default function CheckoutScreen() {
           return;
         }
         if (Platform.OS === 'web') {
-          // On web, show the UPI ID for manual payment
           Alert.alert(
             'UPI Payment',
             `Pay ${formatCurrency(total)} to UPI ID: ${upiId}\n\nOrder ID: ${order.order_no}\n\nAfter payment, your order will be confirmed manually.`,
@@ -164,8 +160,6 @@ export default function CheckoutScreen() {
           return;
         }
         await Linking.openURL(upiUrl);
-        // UPI payments are async — user completes in their UPI app.
-        // Order stays in 'pending' until confirmed manually or via webhook.
         haptic.success();
         clear();
         router.replace(`/tracking/${order.id}`);
@@ -173,7 +167,6 @@ export default function CheckoutScreen() {
       }
 
       if (paymentMethod === 'razorpay') {
-        // Step 2: Create a Razorpay order via edge function
         const razorpayOrder = await createRazorpayOrder(order.id, total);
         pendingOrderRef.current = order.id;
         setRazorpayParams({
@@ -207,7 +200,6 @@ export default function CheckoutScreen() {
     if (!orderId) return;
     setPlacing(true);
     try {
-      // Step 3: Verify the payment signature via edge function
       await verifyRazorpayPayment({
         order_id: orderId,
         razorpay_order_id: result.razorpay_order_id,
@@ -483,3 +475,4 @@ const styles = StyleSheet.create({
   },
   ctaBtn: { flex: 1, marginLeft: SPACING.lg },
 });
+
