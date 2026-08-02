@@ -4,6 +4,7 @@
     "slug": "mezbaan-restro",
     "version": "1.0.0",
     "orientation": "portrait",
+    "jsEngine": "hermes",
     "icon": "assets/images/icon.png",
     "scheme": "mezbaanrestro",
     "userInterfaceStyle": "automatic",
@@ -17,8 +18,8 @@
         "backgroundColor": "#0A0A0B"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.faisalmd44.mezbaanrestro"
-     "jsEngine": "hermes"
+      "package": "com.faisalmd44.mezbaanrestro",
+      "jsEngine": "hermes"
     },
     "web": {
       "bundler": "metro",
@@ -45,3 +46,4 @@
     }
   }
 }
+
