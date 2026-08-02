@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -10,22 +11,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Memory storage is the universal fallback. It is always available and never
-// throws at import time, so a missing/unsupported native module can never
-// block app startup or leave the splash screen hanging.
-const memoryStore = new Map<string, string>();
-const memoryAdapter = {
-  getItem: async (key: string) => memoryStore.get(key) ?? null,
-  setItem: async (key: string, value: string) => {
-    memoryStore.set(key, value);
-  },
-  removeItem: async (key: string) => {
-    memoryStore.delete(key);
-  },
-};
-
-// Synchronous storage adapter for the web. localStorage is always available
-// in a browser context; we guard against private-mode/quota errors.
+// Synchronous storage adapter for web
 const webAdapter = {
   getItem: async (key: string) => {
     try {
@@ -50,12 +36,32 @@ const webAdapter = {
   },
 };
 
-// Pick the storage adapter at creation time. On web we use localStorage
-// synchronously. On native we fall back to the in-memory adapter for the
-// initial client (sessions still work for the current app run) and attempt
-// to upgrade to SecureStore/AsyncStorage for persistence — but critically,
-// the client is created synchronously so the app never blocks on import.
-const storageAdapter = Platform.OS === 'web' ? webAdapter : memoryAdapter;
+// Native persistent adapter using AsyncStorage for reliable session auto-login
+const nativeAdapter = {
+  getItem: async (key: string) => {
+    try {
+      return await AsyncStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string) => {
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch {
+      /* ignore */
+    }
+  },
+  removeItem: async (key: string) => {
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  },
+};
+
+const storageAdapter = Platform.OS === 'web' ? webAdapter : nativeAdapter;
 
 console.log("SUPABASE URL:", supabaseUrl);
 export const supabase = createClient(
@@ -72,39 +78,5 @@ export const supabase = createClient(
   },
 );
 
-// On native, try to migrate the session into SecureStore/AsyncStorage for
-// persistence across app restarts. This runs in the background and never
-// blocks startup — if the native modules are missing the in-memory adapter
-// is already in use.
-if (Platform.OS !== 'web') {
-  (async () => {
-    try {
-      const SecureStore = await import('expo-secure-store');
-      try {
-        const AsyncStorage = await import('@react-native-async-storage/async-storage');
-        // Persist any existing session token to native storage so it survives
-        // a restart. The in-memory adapter holds it for the current run.
-        const { data } = await supabase.auth.getSession();
-        if (data.session?.access_token) {
-          try {
-            await SecureStore.setItemAsync('mezbaan-auth', JSON.stringify(data.session));
-          } catch {
-            try {
-              await AsyncStorage.default.setItem('mezbaan-auth', JSON.stringify(data.session));
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-      } catch {
-        /* AsyncStorage unavailable — SecureStore persistence only */
-      }
-    } catch {
-      /* SecureStore unavailable — in-memory session is fine for this run */
-    }
-  })().catch(() => {
-    /* persistence upgrade is best-effort, never fatal */
-  });
-}
-
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+

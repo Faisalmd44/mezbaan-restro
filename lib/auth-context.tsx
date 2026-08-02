@@ -30,44 +30,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-const loadProfile = useCallback(async (uid: string) => {
-  if (!isSupabaseConfigured) return;
+  const loadProfile = useCallback(async (uid: string) => {
+    if (!isSupabaseConfigured) return;
 
-  try {
-    let { data } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', uid)
-      .maybeSingle();
+    try {
+      let { data } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', uid)
+        .maybeSingle();
 
-    if (!data) {
-      const { data: auth } = await supabase.auth.getUser();
+      if (!data) {
+        const { data: auth } = await supabase.auth.getUser();
 
-      if (auth.user) {
-        const newUser = {
-          id: auth.user.id,
-          name: auth.user.user_metadata?.full_name ?? "",
-          email: auth.user.email ?? "",
-          phone: auth.user.user_metadata?.phone ?? "",
-        };
+        if (auth.user) {
+          const newUser = {
+            id: auth.user.id,
+            name: auth.user.user_metadata?.full_name ?? "",
+            email: auth.user.email ?? "",
+            phone: auth.user.user_metadata?.phone ?? "",
+          };
 
-        await supabase.from("users").insert(newUser);
-
-        data = newUser;
+          await supabase.from("users").insert(newUser);
+          data = newUser;
+        }
       }
-    }
 
-    setProfile(data as any);
-  } catch (e) {
-    console.log("LOAD PROFILE ERROR:", e);
-  }
-}, []);
+      setProfile(data as any);
+    } catch (e) {
+      console.log("LOAD PROFILE ERROR:", e);
+    }
+  }, []);
 
   useEffect(() => {
-    // Safety net: no matter what happens (network unreachable, getSession
-    // never resolves, onAuthStateChange never fires, loadProfile hangs), the
-    // app must become interactive. 3.5s is short enough to feel responsive
-    // and long enough to let a normal getSession round-trip complete.
     const hardTimeout = setTimeout(() => {
       console.warn('[Auth] hard timeout hit — proceeding without session');
       settle();
@@ -87,7 +82,6 @@ const loadProfile = useCallback(async (uid: string) => {
       settle();
     };
 
-    // loadProfile must never be able to keep loading=true forever.
     const safeLoadProfile = (uid: string) =>
       Promise.race([
         loadProfile(uid).catch(() => {}),
@@ -97,23 +91,24 @@ const loadProfile = useCallback(async (uid: string) => {
     let subscription: { unsubscribe: () => void } | undefined;
     try {
       ({ data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-       console.log("AUTH EVENT:", _event);
-       console.log("AUTH SESSION:", newSession);
+        console.log("AUTH EVENT:", _event);
+        console.log("AUTH SESSION:", newSession);
         setSession(newSession);
         if (newSession?.user) {
           safeLoadProfile(newSession.user.id);
         } else {
+          setProfile(null);
           settleOnce();
         }
       }));
     } catch {
-      // onAuthStateChange threw synchronously — rely on getSession fallback.
+      // Fallback if listener failed
     }
 
     supabase.auth
       .getSession()
       .then(({ data }) => {
-       console.log("GET SESSION:", data.session);
+        console.log("GET SESSION:", data.session);
         if (settled) return;
         setSession(data.session);
         if (data.session?.user) {
@@ -128,18 +123,18 @@ const loadProfile = useCallback(async (uid: string) => {
       subscription?.unsubscribe();
       clearTimeout(hardTimeout);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadProfile, settle]);
 
   const refreshProfile = useCallback(async () => {
     if (session?.user) await loadProfile(session.user.id);
   }, [session, loadProfile]);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
-    if (!isSupabaseConfigured) return { error: 'Supabase not configured — set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.' };
+    if (!isSupabaseConfigured) return { error: 'Supabase not configured.' };
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-     console.log("LOGIN DATA:", data);
-     console.log("LOGIN ERROR:", error);
+      console.log("LOGIN DATA:", data);
+      console.log("LOGIN ERROR:", error);
       return { error: error?.message ?? null };
     } catch (e) {
       return { error: e instanceof Error ? e.message : 'Sign in failed' };
@@ -203,3 +198,4 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
+
