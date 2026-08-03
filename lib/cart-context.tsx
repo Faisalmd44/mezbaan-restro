@@ -1,7 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';if (c.code.toUpperCase() === 'WELCOME15') {
-  return await applyWelcomeCoupon();
-}
-
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { Platform, Alert } from 'react-native';
 import * as Application from 'expo-application';
 import type { CartLineSnapshot, Product, ProductVariant, ProductAddon, Coupon, Address, PaymentMethod } from './types';
@@ -76,7 +73,7 @@ type CartContextValue = {
   removeItem: (key: string) => void;
   clear: () => void;
   applyCoupon: (coupon: Coupon) => Promise<boolean>;
-  applyWelcomeCoupon: () => Promise<boolean>;
+  applyWelcomeCoupon: (coupon?: any) => Promise<boolean>;
   removeCoupon: () => void;
   setSelectedAddress: (a: Address | null) => void;
   setPaymentMethod: (m: PaymentMethod) => void;
@@ -216,10 +213,10 @@ const applyWelcomeCoupon = useCallback(async (c: Coupon): Promise<boolean> => {
     } else { discount = Number(coupon.discount_value); }
     discount = Math.round(discount * 100) / 100;
   }
-  const deliveryFee = subtotal === 0 || subtotal - discount >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE_BASE;
-  const taxableBase = Math.max(0, subtotal - discount);
-  const tax = Math.round(((taxableBase + deliveryFee) * TAX_RATE) / 100 * 100) / 100;
-  const total = Math.max(0, taxableBase + deliveryFee + tax);
+const deliveryFee = subtotal === 0 || subtotal - discount >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE_BASE;
+const taxableBase = Math.max(0, subtotal - discount);
+const tax = 0;
+const total = Math.max(0, taxableBase + deliveryFee);
 
   const value: CartContextValue = {
     items, count, subtotal: Math.round(subtotal * 100) / 100, addonsTotal: Math.round(addonsTotal * 100) / 100,

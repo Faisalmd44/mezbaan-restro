@@ -40,7 +40,7 @@ export default function CartScreen() {
   };
 
   const handleApplyCoupon = async () => {
-    if (couponInput.trim().toUpperCase())) return;
+    if (!couponInput.trim()) return;
     setValidating(true); setCouponError(null);
     try {
       const first = await isFirstOrder();
@@ -140,8 +140,8 @@ export default function CartScreen() {
           <PriceRow label="Item Total" value={formatCurrency(subtotal)} />
           {discount > 0 && <PriceRow label="Coupon Discount" value={`- ${formatCurrency(discount)}`} color={COLORS.success} />}
           <PriceRow label="Delivery Fee" value={deliveryFee === 0 ? 'FREE' : formatCurrency(deliveryFee)} />
-          <PriceRow label="Taxes & Charges" value={formatCurrency(tax)} />
-          <View style={styles.divider} />
+         {/* <PriceRow label="Taxes & Charges" value={formatCurrency(tax)} /> */}         
+            <View style={styles.divider} />
           <PriceRow label="To Pay" value={formatCurrency(total)} bold color={COLORS.gold} />
         </View>
         <View style={{ height: 100 }} />

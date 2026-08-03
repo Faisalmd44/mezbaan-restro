@@ -20,8 +20,13 @@ export function CartBar({ count, total, onPress }: Props) {
             </View>
           </View>
           <View>
-            <Text variant="caption" color="black" style={styles.label}>{count} item{count > 1 ? 's' : ''} • {formatCurrency(total)}</Text>
-            <Text weight="semiBold" color="black" style={styles.cta}> View Cart → </Text>
+<Text variant="caption" color="#000000" style={styles.label}>
+  {count} item{count > 1 ? 's' : ''} • {formatCurrency(total)}
+</Text>
+
+<Text weight="semiBold" color="#000000" style={styles.cta}>
+  View Cart →
+</Text>
           </View>
         </View>
       </LinearGradient>
@@ -53,7 +58,7 @@ const styles = StyleSheet.create({
 },
   left: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, flex: 1 },
   bagWrap: { position: 'relative', width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' },
-  countBadge: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: COLORS.black, borderWidth: 1.5, borderColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  countBadge: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: "#000000", borderWidth: 1.5, borderColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   countText: { fontSize: 10 },
   label: { opacity: 0.85 },
   cta: { fontSize: TYPOGRAPHY.base },

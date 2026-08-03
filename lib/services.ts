@@ -40,7 +40,6 @@ console.log("MENU ITEMS =>", data);
         slug: row.category.toLowerCase().replace(/\s+/g, "-"),
         image_url: row.image ?? null,
         sort_order: 0,
-        active: true,
         created_at: "",
       });
     }
@@ -384,12 +383,21 @@ if (itemError) throw itemError;
 }
 
 export async function fetchOrders(): Promise<Order[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return [];
+
   const { data, error } = await supabase
-    .from('orders')
-    .select('*')
-    .order('created_at', { ascending: false })
+    .from("orders")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
     .limit(100);
+
   if (error) throw error;
+
   return (data ?? []) as Order[];
 }
 
