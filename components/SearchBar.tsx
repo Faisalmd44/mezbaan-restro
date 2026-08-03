@@ -4,7 +4,7 @@ import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '@/lib/theme';
 
 type Props = { value: string; onChangeText: (t: string) => void; placeholder?: string; onSubmit?: () => void };
 
-export function SearchBar({ value, onChangeText, placeholder = 'Search dishes\u2026', onSubmit }: Props) {
+export function SearchBar({ value, onChangeText, placeholder = 'Search dishes', onSubmit }: Props) {
   return (
     <View style={styles.wrap}>
       <Search size={18} color={COLORS.onSurfaceSecondary} />

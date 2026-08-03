@@ -57,7 +57,7 @@ export default function MenuScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.sticky}>
-        <SearchBar value={search} onChangeText={setSearch} placeholder="Search for dishes\u2026" />
+        <SearchBar value={search} onChangeText={setSearch} placeholder="Search for dishes" />
         <View style={styles.filtersRow}>
           <Pressable onPress={() => { haptic.selection(); setVegFilter('all'); }} style={({ pressed }) => [styles.filterPill, vegFilter === 'all' && styles.filterActive, pressed && { transform: [{ scale: 0.96 }] }]}><Text variant="caption" weight="semiBold" color={vegFilter === 'all' ? 'gold' : 'secondary'}>All</Text></Pressable>
           <Pressable onPress={() => { haptic.selection(); setVegFilter('veg'); }} style={({ pressed }) => [styles.filterPill, vegFilter === 'veg' && styles.filterActive, pressed && { transform: [{ scale: 0.96 }] }]}><Leaf size={13} color={vegFilter === 'veg' ? COLORS.gold : COLORS.onSurfaceSecondary} /><Text variant="caption" weight="semiBold" color={vegFilter === 'veg' ? 'gold' : 'secondary'}>Veg</Text></Pressable>

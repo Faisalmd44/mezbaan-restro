@@ -160,11 +160,33 @@ export default function CheckoutScreen() {
           return;
         }
         await Linking.openURL(upiUrl);
+
+// FIX: Do not auto-redirect. Ask user to confirm payment.
+
+Alert.alert(
+  'Payment Confirmation',
+  'Did you complete the payment successfully?',
+  [
+    {
+      text: 'No / Cancelled',
+      style: 'cancel',
+      onPress: () => {
+        // Order pending hi rahega, cart clear nahi hogi. User wapas try kar sakta hai.
+        setError('Payment was not completed. You can try again.');
+      }
+    },
+    {
+      text: 'Yes, Paid',
+      onPress: () => {
         haptic.success();
         clear();
         router.replace(`/tracking/${order.id}`);
-        return;
       }
+    }
+  ]
+);
+return;
+}
 
       if (paymentMethod === 'razorpay') {
         const razorpayOrder = await createRazorpayOrder(order.id, total);

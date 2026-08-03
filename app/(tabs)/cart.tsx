@@ -40,11 +40,12 @@ export default function CartScreen() {
   };
 
   const handleApplyCoupon = async () => {
-    if (!couponInput.trim()) return;
+    if (couponInput.trim().toUpperCase())) return;
     setValidating(true); setCouponError(null);
     try {
       const first = await isFirstOrder();
-      const { coupon: c, error } = await validateCoupon(couponInput.trim(), subtotal, first);
+      const { coupon: c, error } = await validateCoupon(couponInput.trim().toUpperCase(), subtotal, first);
+
       if (error || !c) { setCouponError(error ?? 'Invalid coupon'); haptic.error(); }
       else { applyCoupon(c); setCouponInput(''); haptic.success(); }
     } catch { setCouponError('Could not validate coupon.'); }

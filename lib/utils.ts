@@ -36,7 +36,7 @@ export const haptic = {
 };
 
 export function truncate(text: string, max: number): string {
-  return text.length > max ? text.slice(0, max - 1) + '\u2026' : text;
+  return text.length > max ? text.slice(0, max - 1) + '...'  : text;
 }
 
 export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {

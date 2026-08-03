@@ -1,4 +1,7 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';if (c.code.toUpperCase() === 'WELCOME15') {
+  return await applyWelcomeCoupon();
+}
+
 import { Platform, Alert } from 'react-native';
 import * as Application from 'expo-application';
 import type { CartLineSnapshot, Product, ProductVariant, ProductAddon, Coupon, Address, PaymentMethod } from './types';
@@ -134,75 +137,70 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const removeItem = useCallback((key: string) => { setItems((prev) => prev.filter((i) => i.key !== key)); }, []);
   const clear = useCallback(() => { setItems([]); setCoupon(null); setCouponCode(null); setOrderNotes(''); }, []);
 
-  // Standard Coupon Application Router
-  const applyCoupon = useCallback(async (c: Coupon) => {
-    if (c.code.toUpperCase() === 'WELCOME15') {
-      return await applyWelcomeCoupon();
-    }
-    setCoupon(c);
-    setCouponCode(c.code);
-    return true;
-  }, [user?.id]);
+// Standard Coupon Application Router                          
+
+const applyCoupon = useCallback(async (c: Coupon) => {           
+  // Aapki batayi hui sahi line:
+  if (c.code.toUpperCase() === 'WELCOME15') {                      
+    return await applyWelcomeCoupon(c); // <-- Bas yahan 'c' pass karna hai                           
+  }                                                              
+  setCoupon(c);                                                  
+  setCouponCode(c.code);                                         
+  return true;                                                 
+}, [user?.id]); 
 
   // Anti-Abuse WELCOME15 Coupon (1 per physical Device + Account lock)
-  const applyWelcomeCoupon = useCallback(async (): Promise<boolean> => {
-    if (!user) {
-      Alert.alert('Login Required', 'Please log in to claim WELCOME15 coupon.');
+
+const applyWelcomeCoupon = useCallback(async (c: Coupon): Promise<boolean> => {
+  if (!user) {
+    Alert.alert('Login Required', `Please log in to claim ${c.code} coupon.`);
+    return false;
+  }
+  
+  try {
+    const deviceId = await getDeviceId();
+    
+    // 1. Check if physical DEVICE has ever used this coupon
+    const { data: deviceOrders } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('device_id', deviceId)
+      .eq('coupon_code', c.code)
+      .limit(1);
+      
+    if (deviceOrders && deviceOrders.length > 0) {
+      Alert.alert(
+        'Offer Already Claimed 🛑',
+        `${c.code} has already been used on this phone/device! New accounts on the same device are not eligible.`
+      );
       return false;
     }
-
-    try {
-      const deviceId = await getDeviceId();
-
-      // 1. Check if physical DEVICE has ever used WELCOME15
-      const { data: deviceOrders } = await supabase
-        .from('orders')
-        .select('id')
-        .eq('device_id', deviceId)
-        .eq('coupon_code', 'WELCOME15')
-        .limit(1);
-
-      if (deviceOrders && deviceOrders.length > 0) {
-        Alert.alert(
-          'Offer Already Claimed 🛑',
-          'WELCOME15 has already been used on this phone/device! New accounts on the same device are not eligible.'
-        );
-        return false;
-      }
-
-      // 2. Check if USER ACCOUNT has ever used WELCOME15
-      const { data: userOrders } = await supabase
-        .from('orders')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('coupon_code', 'WELCOME15')
-        .limit(1);
-
-      if (userOrders && userOrders.length > 0) {
-        Alert.alert('Coupon Already Used', 'You have already used WELCOME15 on this account.');
-        return false;
-      }
-
-      const welcomeCouponObj: Coupon = {
-        id: 'welcome15',
-        code: 'WELCOME15',
-        discount_type: 'percent',
-        discount_value: 15,
-        min_order: 0,
-        max_discount: 100,
-        is_active: true,
-      };
-
-      setCoupon(welcomeCouponObj);
-      setCouponCode('WELCOME15');
-      Alert.alert('Success 🎉', 'WELCOME15 Applied! 15% discount added to your cart.');
-      return true;
-
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to validate coupon.');
+    
+    // 2. Check if USER ACCOUNT has ever used this coupon
+    const { data: userOrders } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('coupon_code', c.code)
+      .limit(1);
+      
+    if (userOrders && userOrders.length > 0) {
+      Alert.alert('Coupon Already Used', `You have already used ${c.code} on this account.`);
       return false;
     }
-  }, [user]);
+    
+    // Yahan se hardcoded welcomeCouponObj ko hata diya gaya hai.
+    // Hum directly passed coupon 'c' ko state mein set kar rahe hain.
+    setCoupon(c);
+    setCouponCode(c.code);
+    Alert.alert('Success 🎉', `${c.code} Applied! Discount added to your cart.`);
+    return true;
+    
+  } catch (e: any) {
+    Alert.alert('Error', e?.message || 'Failed to validate coupon.');
+    return false;
+  }
+}, [user]);
 
   const removeCoupon = useCallback(() => { setCoupon(null); setCouponCode(null); }, []);
 
